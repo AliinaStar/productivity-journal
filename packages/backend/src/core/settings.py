@@ -33,9 +33,8 @@ class AppSettings(BaseSettings):
     openai_api_key: str = ""
     llm_model: str = "gpt-4o"           # для генерації звітів
     eval_model: str = "gpt-4o-mini"     # для LLM-as-judge в evaluation
-    embedding_dimensions: int = 384
-    embedding_model_big: str = ""
-    embedding_dimensions_big: int = 512
+    embedding_model: str = ""
+    embedding_dimensions: int = 768
 
     # Langfuse
     langfuse_public_key: str = ""

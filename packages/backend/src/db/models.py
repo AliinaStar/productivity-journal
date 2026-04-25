@@ -8,7 +8,8 @@ from sqlalchemy import (
     Date,
     CheckConstraint,
     Text,
-    Float
+    Float,
+    Index
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -17,6 +18,15 @@ from src.db.base import Base
 
 class Entry(Base):
     __tablename__ = "entry"
+    __table_args__ = (
+        Index(
+            "ix_entry_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     goal_id: Mapped[int] = mapped_column(ForeignKey("goal.id"))
@@ -73,7 +83,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(250), unique=True)
     language: Mapped[str] = mapped_column(String(50), server_default="English")
     gender: Mapped[str | None] = mapped_column(
-        Enum("male", "female", name="gender"),
+        Enum("male", "female", "unspecified", name="gender"),
         nullable=True
     )
 

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(cmd /c \"py -3 -c \\\\\"import pandas as pd; df_b = pd.read_csv\\('e:/projects/University/BKR/bcr-app/packages/backend/notebooks/experiments/results_baseline_rag.csv'\\); df_m = pd.read_csv\\('e:/projects/University/BKR/bcr-app/packages/backend/notebooks/experiments/results_mmr_rag.csv'\\); print\\('baseline method:', df_b['method'].unique\\(\\)\\); print\\('mmr method:', df_m['method'].unique\\(\\)\\); cols = ['diversity','context_precision','faithfulness_report','answer_relevancy_report']; print\\('baseline means:', df_b[cols].mean\\(\\).to_dict\\(\\)\\); print\\('mmr means:', df_m[cols].mean\\(\\).to_dict\\(\\)\\); print\\('identical:', df_b[cols].equals\\(df_m[cols]\\)\\)\\\\\"\")"
+    ]
+  }
+}

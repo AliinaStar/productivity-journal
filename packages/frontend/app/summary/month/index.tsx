@@ -2,6 +2,7 @@ import { Text, TouchableOpacity, ScrollView, StyleSheet, View } from 'react-nati
 import { useRouter } from 'expo-router';
 
 const MONTHS = [
+  { id: 'm0', label: 'October 2025',  score: '5.0', days: '3 goals', headline: 'From starting to operating' },
   { id: 'm1', label: 'June 2025',     score: '4.0', days: '24/30', headline: 'The month you figured out your rhythm' },
   { id: 'm2', label: 'May 2025',      score: '3.6', days: '20/31', headline: 'Slow start, strong finish' },
   { id: 'm3', label: 'April 2025',    score: '3.8', days: '22/30', headline: 'Finding consistency in small habits' },

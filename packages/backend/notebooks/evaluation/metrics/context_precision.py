@@ -9,7 +9,7 @@ from notebooks.evaluation.prompts.precision import PRECISION_PROMPT
 from notebooks.evaluation.schemas import RetrievedChunk
 
 
-def calculate_context_precision(
+async def calculate_context_precision(
     chunks: list[RetrievedChunk],
     current_summary: str,
     llm: ChatOpenAI,
@@ -17,7 +17,7 @@ def calculate_context_precision(
 ) -> float:
     """LLM-judge context precision via Mean Graded Relevance.
 
-    Each chunk is scored 0-2 by LLM judge.
+    Each chunk is scored 0-2 by LLM judge (all chunks in parallel).
     MGR = sum(scores) / (n_chunks * max_score).
 
     Args:
@@ -32,21 +32,24 @@ def calculate_context_precision(
     Raises:
         ValueError: If fewer than 2 chunks are provided.
     """
+    import asyncio
+
     if len(chunks) < 2:
         raise ValueError("context_precision requires at least 2 chunks")
 
-    scores: list[int] = []
-    for chunk in chunks:
+    async def score_chunk(chunk: RetrievedChunk) -> int | None:
         try:
             prompt = PRECISION_PROMPT.format(
                 current_summary=current_summary,
                 chunk_text=chunk.text,
             )
-            response = llm.invoke(prompt)
-            score = json.loads(response.content)["score"]
-            scores.append(score)
+            response = await llm.ainvoke(prompt)
+            return json.loads(response.content)["score"]
         except Exception:
-            pass
+            return None
+
+    raw = await asyncio.gather(*[score_chunk(c) for c in chunks])
+    scores = [s for s in raw if s is not None]
 
     if not scores:
         return 0.0

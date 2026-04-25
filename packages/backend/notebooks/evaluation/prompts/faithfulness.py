@@ -7,7 +7,6 @@
 Підхід: двокроковий — спочатку витягуємо твердження, потім верифікуємо кожне.
 """
 
-# Крок 1: витягуємо атомарні твердження зі звіту
 FAITHFULNESS_EXTRACT_CLAIMS_TEMPLATE = """\
 You are analyzing a personal progress report generated for a behavioral change journal app.
 

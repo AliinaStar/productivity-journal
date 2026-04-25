@@ -1,7 +1,7 @@
-"""RAGAS faithfulness and answer_relevancy for summary and report generation stages."""
+"""RAGAS faithfulness and answer_relevancy for report generation."""
 
 import json
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from langchain_openai import ChatOpenAI
 
@@ -10,52 +10,61 @@ from notebooks.evaluation.prompts.faithfulness import (
     FAITHFULNESS_EXTRACT_CLAIMS_TEMPLATE,
     FAITHFULNESS_VERIFY_CLAIM_TEMPLATE,
 )
-from notebooks.evaluation.schemas import PeriodSummary, ReportResult, RetrievedContext
+from notebooks.evaluation.schemas import ReportResult, RetrievedContext
 
 
 def format_context(retrieved_context: RetrievedContext) -> str:
+    """Build the context string the faithfulness judge sees.
+
+    source_chunks (raw current entries) are included only when pattern_reports
+    are absent — when pattern_reports exist they already represent what the model
+    saw as current-period context (sub-period summaries), so raw entries would
+    be redundant and misleading.
+    """
     parts = []
+
+    if retrieved_context.goal_metrics_block:
+        parts.append(f"Goal statistics:\n{retrieved_context.goal_metrics_block}")
+
+    if retrieved_context.source_chunks and not retrieved_context.pattern_reports:
+        chunks_text = "\n---\n".join(
+            c.text for c in retrieved_context.source_chunks
+        )
+        parts.append(f"Current period entries:\n{chunks_text}")
 
     if retrieved_context.moment_chunks:
         chunks_text = "\n---\n".join(
             c.text for c in retrieved_context.moment_chunks
         )
-        parts.append(f"Retrieved entries:\n{chunks_text}")
+        parts.append(f"Retrieved past entries:\n{chunks_text}")
 
     if retrieved_context.pattern_reports:
         reports_text = "\n---\n".join(
-            r.text for r in retrieved_context.pattern_reports  # Report → str
+            r.text for r in retrieved_context.pattern_reports
         )
-        parts.append(f"Retrieved reports:\n{reports_text}")
+        parts.append(f"Current period summaries:\n{reports_text}")
 
     return "\n\n".join(parts) if parts else ""
 
 
-def calculate_faithfulness(
-    data: PeriodSummary | ReportResult,
-    stage: Literal["summary", "report"],
+async def calculate_faithfulness(
+    data: ReportResult,
     llm: ChatOpenAI,
     trace: Optional[Any] = None,
 ) -> float | None:
     """Compute faithfulness via two-step LLM judge.
 
     Step 1: Extract atomic claims from generated text.
-    Step 2: Verify each claim against retrieved context.
+    Step 2: Verify all claims in parallel against the context the model actually saw.
     Score = supported_claims / total_claims.
-
-    Args:
-        data: PeriodSummary for stage="summary", ReportResult for stage="report".
-        stage: "summary" or "report" — determines Langfuse score name.
-        llm: LangChain LLM client.
-        trace: Optional Langfuse trace for logging.
 
     Returns:
         Faithfulness score in [0, 1], or None if computation fails.
     """
+    import asyncio
+
     try:
-        generated_text = (
-            data.summary_text if stage == "summary" else data.generated_text
-        )
+        generated_text = data.generated_text
         retrieved_context = data.context
 
         if retrieved_context is None:
@@ -65,31 +74,29 @@ def calculate_faithfulness(
         if not context:
             return None
 
-        # крок 1: витягуємо атомарні твердження
         extract_prompt = FAITHFULNESS_EXTRACT_CLAIMS_TEMPLATE.format(
             generated_report=generated_text
         )
-        claims_response = llm.invoke(extract_prompt)
+        claims_response = await llm.ainvoke(extract_prompt)
         claims = json.loads(claims_response.content)["claims"]
 
         if not claims:
             return None
 
-        # крок 2: верифікуємо кожне твердження
-        scores = []
-        for claim in claims:
+        async def verify_claim(claim: str) -> int:
             verify_prompt = FAITHFULNESS_VERIFY_CLAIM_TEMPLATE.format(
                 context=context,
                 claim=claim,
             )
-            verify_response = llm.invoke(verify_prompt)
-            score = json.loads(verify_response.content)["supported"]
-            scores.append(int(score))
+            verify_response = await llm.ainvoke(verify_prompt)
+            return int(json.loads(verify_response.content)["supported"])
+
+        scores = await asyncio.gather(*[verify_claim(c) for c in claims])
 
         faithfulness = sum(scores) / len(scores)
 
         if trace:
-            trace.score(name=f"faithfulness_{stage}", value=faithfulness)
+            trace.score(name="faithfulness", value=faithfulness)
 
         return faithfulness
 
@@ -97,43 +104,30 @@ def calculate_faithfulness(
         return None
 
 
-def calculate_answer_relevancy(
-    data: PeriodSummary | ReportResult,
-    stage: Literal["summary", "report"],
-    period_type: Literal["week", "month", "year"],
+async def calculate_answer_relevancy(
+    data: ReportResult,
+    period_type: str,
     report_goal: str,
     llm: ChatOpenAI,
     trace: Optional[Any] = None,
 ) -> int | None:
     """Compute answer relevancy via LLM judge on a 1-5 scale.
 
-    Args:
-        data: PeriodSummary for stage="summary", ReportResult for stage="report".
-        stage: "summary" or "report" — determines Langfuse score name.
-        period_type: "month" or "year" — used in judge prompt.
-        period_start: Period start date string for context.
-        llm: LangChain LLM client.
-        trace: Optional Langfuse trace for logging.
-
     Returns:
         Relevancy score 1-5, or None if computation fails.
     """
     try:
-        generated_text = (
-            data.summary_text if stage == "summary" else data.generated_text
-        )
-
         prompt = ANSWER_RELEVANCY_TEMPLATE.format(
             report_goal=report_goal,
             period_type=period_type,
-            generated_report=generated_text,
+            generated_report=data.generated_text,
         )
 
-        response = llm.invoke(prompt)
+        response = await llm.ainvoke(prompt)
         score = json.loads(response.content)["score"]
 
         if trace:
-            trace.score(name=f"answer_relevancy_{stage}", value=score)
+            trace.score(name="answer_relevancy", value=score)
 
         return int(score)
 

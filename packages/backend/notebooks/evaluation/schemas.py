@@ -9,38 +9,35 @@ if TYPE_CHECKING:
 
 @dataclass
 class RetrievedChunk:
-    entry_id: int        # unused in metrics
+    entry_id: int
     text: str
     embedding: list[float]
     date: date
-    goal_id: int         # unused in metrics
-    relevance_score: float  # cosine similarity — unused in metrics
+    goal_id: int
+    relevance_score: float
 
 @dataclass
 class Report:
-    report_id: int               # unused in metrics
+    report_id: int
     text: str
-    period: Literal["month", "week"]  # unused in metrics
+    period: Literal["month", "week"]
 
 @dataclass
 class RetrievedContext:
-    moment_chunks: list[RetrievedChunk] | None   # конкретні записи
-    pattern_reports: list[Report] | None         # попередні звіти
-
-@dataclass
-class PeriodSummary:
-    summary_text: str
-    context: RetrievedContext
-    tokens_used: int
-    generation_time: float
+    moment_chunks: list[RetrievedChunk] | None   # retrieved минулі записи (RAG)
+    pattern_reports: list[Report] | None         # попередні звіти / sub-period summaries
+    source_chunks: list[RetrievedChunk] | None = None  # поточні записи (для faithfulness без summaries)
+    total_available_months: int | None = None    # всього унікальних місяців в historical pool (для temporal_breadth)
+    pool_avg_similarity: float | None = None     # середня попарна схожість всього пулу (для normalized_diversity)
+    goal_metrics_block: str | None = None        # статистика по цілях (active days, avg score) — передається в LLM і суддю
 
 @dataclass
 class ReportResult:
-    context: RetrievedContext | None  # None для тижня
+    context: RetrievedContext | None
     generated_text: str
     tokens_used: int
     final_generation_time: float
-    method: str             # "baseline_rag" | "rag_mmr" | "gcr"
+    method: str             # "baseline_rag" | "mmr_rag" | "raw_generation"
     user_id: int
     period: Literal["month", "week", "year"]
     period_start: date
@@ -49,27 +46,23 @@ class ReportResult:
 class EvaluationResult:
     # ідентифікація
     sample_id: str
-    method: str        # "baseline_rag" | "rag_mmr" | "gcr"
+    method: str
     user_id: int
     period_start: date
     period_type: Literal["month", "week", "year"]
-    
-    # retrieval метрики
-    diversity: float | None
-    temporal_coverage: float | None
-    context_precision: float | None
-    
-    # generation метрики
-    faithfulness_summary: float | None
-    faithfulness_report: float | None
-    answer_relevancy_summary: int | None
-    answer_relevancy_report: int | None
-    
-    # технічні — summary стадія (None якщо тижень або summary не було)
-    summary_tokens_used: int | None
-    summary_generation_time: float | None
 
-    # технічні — report стадія
+    # retrieval метрики (None для тижня і raw_generation week)
+    diversity: float | None
+    normalized_diversity: float | None
+    temporal_coverage: float | None
+    temporal_breadth: float | None
+    context_precision: float | None
+
+    # generation метрики
+    faithfulness_report: float | None
+    answer_relevancy_report: int | None
+
+    # технічні
     report_tokens_used: int
     report_generation_time: float
 
@@ -81,14 +74,12 @@ class EvaluationResult:
 
 _FLOAT_METRIC_FIELDS = [
     "diversity",
+    "normalized_diversity",
     "temporal_coverage",
+    "temporal_breadth",
     "context_precision",
-    "faithfulness_summary",
     "faithfulness_report",
-    "answer_relevancy_summary",
     "answer_relevancy_report",
-    "summary_tokens_used",
-    "summary_generation_time",
     "report_tokens_used",
     "report_generation_time",
 ]
@@ -96,32 +87,20 @@ _FLOAT_METRIC_FIELDS = [
 
 class EvaluationLogger:
     def __init__(self, output_path: str, langfuse: "Langfuse") -> None:
-        """Initialize logger with a CSV output path and a Langfuse client.
-
-        Args:
-            output_path: File path where results CSV will be written.
-            langfuse: Langfuse v3 client used to log metric scores.
-        """
         self.results: list[EvaluationResult] = []
         self.output_path = output_path
         self._langfuse = langfuse
+        import os
+        if os.path.exists(output_path):
+            os.remove(output_path)
 
     def _append_to_csv(self, result: EvaluationResult) -> None:
-        """Дописує один рядок у CSV одразу після оцінки — щоб не втратити дані якщо впаде."""
         import os
         row = pd.DataFrame([result.to_dict()])
         write_header = not os.path.exists(self.output_path)
         row.to_csv(self.output_path, mode='a', header=write_header, index=False)
 
     def log(self, result: EvaluationResult) -> None:
-        """Append result and log all numeric metrics to Langfuse.
-
-        Scores are grouped by session_id = "{method}_{period_type}" so that
-        Langfuse can show averages per method per period type across all users.
-
-        Args:
-            result: Completed evaluation result to record.
-        """
         self.results.append(result)
         self._append_to_csv(result)
         session_id = f"{result.method}_{result.period_type}"
@@ -148,6 +127,5 @@ class EvaluationLogger:
                     span.score(name=field, value=float(value))
 
     def save(self) -> None:
-        """Write all logged results to CSV at output_path."""
         df = pd.DataFrame([r.to_dict() for r in self.results])
         df.to_csv(self.output_path, index=False)

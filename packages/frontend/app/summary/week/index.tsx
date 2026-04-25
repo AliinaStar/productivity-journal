@@ -2,6 +2,7 @@ import { Text, TouchableOpacity, ScrollView, StyleSheet, View } from 'react-nati
 import { useRouter } from 'expo-router';
 
 const WEEKS = [
+  { id: 'w0', label: 'Jul 28 – Aug 3', dates: 'Weekly Report', score: '4.0', days: 'Steady' },
   { id: 'w1', label: 'Week 23', dates: 'Jun 2 – 8',  score: '4.1', days: '6/7' },
   { id: 'w2', label: 'Week 22', dates: 'May 26 – Jun 1', score: '3.8', days: '5/7' },
   { id: 'w3', label: 'Week 21', dates: 'May 19 – 25', score: '4.3', days: '7/7' },
