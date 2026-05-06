@@ -6,7 +6,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.18.4",
+    "apscheduler>=3.10.0",
+    "email-validator>=2.1.0",
     "fastapi>=0.135.1",
+    "pydantic-settings>=2.0.0",
+    "resend>=2.0.0",
     "langchain>=1.2.10",
     "langchain-community>=0.4.1",
     "langchain-huggingface>=1.2.0",

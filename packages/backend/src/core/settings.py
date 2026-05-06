@@ -36,6 +36,10 @@ class AppSettings(BaseSettings):
     embedding_model: str = ""
     embedding_dimensions: int = 768
 
+    # Email (Resend)
+    resend_api_key: str = ""
+    email_from: str = "noreply@yourdomain.com"
+
     # Langfuse
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""

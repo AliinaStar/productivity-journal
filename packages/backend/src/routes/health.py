@@ -17,8 +17,7 @@ class HealthResponse(BaseModel):
 @router.get("/health", response_model=HealthResponse)
 def health():
     """Basic liveness probe."""
-    settings = get_settings()
-    return HealthResponse(domain=settings.domain.value)
+    return HealthResponse()
 
 
 @router.get("/readiness")

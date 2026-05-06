@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import (
     String,
@@ -6,10 +6,12 @@ from sqlalchemy import (
     ForeignKey,
     Enum,
     Date,
+    DateTime,
     CheckConstraint,
     Text,
     Float,
-    Index
+    Boolean,
+    Index,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -73,6 +75,24 @@ class Report(Base):
     final_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="reports")
+
+
+class AuthCode(Base):
+    """One-time login code sent to the user's email.
+
+    A new row is created on every ``POST /auth/send-code`` request.
+    ``used`` is flipped to ``True`` after successful verification so the
+    code cannot be reused. Expired or used rows can be cleaned up by a
+    periodic job (not implemented yet).
+    """
+
+    __tablename__ = "auth_code"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(250), nullable=False, index=True)
+    code: Mapped[str] = mapped_column(String(6), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class User(Base):
