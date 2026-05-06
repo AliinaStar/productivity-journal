@@ -26,6 +26,7 @@ venv/
 env/
 .venv
 pip-log.txt
+*.csv
 
 # OS
 .DS_Store

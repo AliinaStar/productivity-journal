@@ -36,5 +36,5 @@ Score guide:
 - 4 = mostly relevant, covers goals and period with minor gaps
 - 5 = perfectly relevant, directly addresses all goals and behavioral progress
 
-Only output the JSON, nothing else.\
+Only output the JSON, nothing else.
 """

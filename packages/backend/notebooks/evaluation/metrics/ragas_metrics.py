@@ -4,6 +4,7 @@ import json
 from typing import Any, Optional
 
 from langchain_openai import ChatOpenAI
+import asyncio
 
 from notebooks.evaluation.prompts.answer_relevancy import ANSWER_RELEVANCY_TEMPLATE
 from notebooks.evaluation.prompts.faithfulness import (
@@ -61,7 +62,6 @@ async def calculate_faithfulness(
     Returns:
         Faithfulness score in [0, 1], or None if computation fails.
     """
-    import asyncio
 
     try:
         generated_text = data.generated_text
