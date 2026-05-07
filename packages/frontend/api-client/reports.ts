@@ -25,6 +25,15 @@ export async function requestReport(period: PeriodType, periodStart: string, per
   return res.json();
 }
 
+// Отримати список всіх збережених звітів певного типу
+export async function listReports(period: PeriodType, userId: number): Promise<RemoteReport[]> {
+  const res = await fetch(`${BASE_URL}/reports/list?period=${period}`, {
+    headers: { 'X-User-ID': String(userId) },
+  });
+  if (!res.ok) throw new Error(`Failed to list reports: ${res.status}`);
+  return res.json();
+}
+
 // Отримати вже збережений звіт з бекенду
 export async function fetchReport(period: PeriodType, periodStart: string, userId: number): Promise<RemoteReport | null> {
   const res = await fetch(`${BASE_URL}/reports?period=${period}&period_start=${periodStart}`, {

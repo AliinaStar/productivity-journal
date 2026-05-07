@@ -10,6 +10,14 @@ export interface RemoteEntry {
   productivity_score: number;
 }
 
+export async function listEntries(userId: number): Promise<RemoteEntry[]> {
+  const res = await fetch(`${BASE_URL}/entries`, {
+    headers: { 'X-User-ID': String(userId) },
+  });
+  if (!res.ok) throw new Error(`Failed to list entries: ${res.status}`);
+  return res.json();
+}
+
 export async function createEntry(
   entry: Omit<Entry, 'id' | 'remote_id' | 'synced' | 'goal_id'>,
   remoteGoalId: number,

@@ -10,6 +10,7 @@ import * as GoalsApi from '@/api-client/goals';
 import * as EntriesApi from '@/api-client/entries';
 import * as ReportsApi from '@/api-client/reports';
 import { PeriodType } from '@/db/types';
+import { toPeriodKey } from '@/utils/period';
 
 export function useSync() {
   const [syncing, setSyncing] = useState(false);
@@ -117,5 +118,52 @@ export function useSync() {
     }
   }
 
-  return { sync, pushChanges, pullReport, generateReport, syncing, error };
+  async function clearLocalData(): Promise<void> {
+    await entries.clearAll();
+    await goals.clearAll();
+    await reports.clearAll();
+  }
+
+  async function pullGoals(): Promise<void> {
+    const userId = await requireUserId();
+    const remoteGoals = await GoalsApi.listGoals(userId);
+    for (const remote of remoteGoals) {
+      await goals.upsertFromRemote(remote);
+    }
+  }
+
+  async function pullEntries(): Promise<void> {
+    const userId = await requireUserId();
+    const remoteEntries = await EntriesApi.listEntries(userId);
+    for (const remote of remoteEntries) {
+      const localGoal = await goals.getByRemoteId(remote.goal_id);
+      if (!localGoal) continue;
+      await entries.upsertFromRemote(remote, localGoal.id);
+    }
+  }
+
+  // Pull all reports of a given period type from backend and cache any that are missing locally
+  async function syncReports(period: PeriodType): Promise<void> {
+    const userId = await requireUserId();
+    const remoteList = await ReportsApi.listReports(period, userId);
+
+    for (const remote of remoteList) {
+      if (!remote.final_report) continue;
+      const key = toPeriodKey(period, remote.period_start);
+      const existing = await reports.get(period, key);
+      if (existing) continue;
+
+      await reports.upsert({
+        period_type:      period,
+        period_key:       key,
+        period_start:     remote.period_start,
+        period_end:       remote.period_end,
+        avg_productivity: remote.avg_productivity,
+        active_days:      remote.active_days,
+        data:             JSON.stringify(remote.final_report),
+      });
+    }
+  }
+
+  return { sync, pushChanges, pullReport, generateReport, syncReports, pullGoals, pullEntries, clearLocalData, syncing, error };
 }

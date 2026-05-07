@@ -1,34 +1,63 @@
-import { Text, TouchableOpacity, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
-
-const WEEKS = [
-  { id: 'w0', label: 'Jul 28 – Aug 3', dates: 'Weekly Report', score: '4.0', days: 'Steady' },
-  { id: 'w1', label: 'Week 23', dates: 'Jun 2 – 8',  score: '4.1', days: '6/7' },
-  { id: 'w2', label: 'Week 22', dates: 'May 26 – Jun 1', score: '3.8', days: '5/7' },
-  { id: 'w3', label: 'Week 21', dates: 'May 19 – 25', score: '4.3', days: '7/7' },
-];
+import { useCallback, useState } from 'react';
+import { Text, TouchableOpacity, ScrollView, StyleSheet, View, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useReports } from '@/db/reports';
+import { useSync } from '@/hooks/useSync';
+import { ReportCache } from '@/db/types';
+import { toPeriodKey, periodLabel } from '@/utils/period';
 
 export default function WeekList() {
   const router = useRouter();
+  const reports = useReports();
+  const { pullReport, syncReports } = useSync();
+  const [items, setItems] = useState<ReportCache[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useFocusEffect(useCallback(() => {
+    async function load() {
+      try { await syncReports('week'); } catch (e) { console.error('syncReports error:', e); }
+      const data = await reports.getAll('week');
+      setItems(data);
+      setLoading(false);
+    }
+    load();
+  }, []));
+
+  async function handlePull(item: ReportCache) {
+    await pullReport('week', toPeriodKey('week', item.period_start), item.period_start, item.period_end);
+    const data = await reports.getAll('week');
+    setItems(data);
+  }
 
   return (
     <ScrollView style={s.scroll} contentContainerStyle={s.content}>
       <Text style={s.header}>Weekly reports</Text>
-      {WEEKS.map(w => (
-        <TouchableOpacity
-          key={w.id}
-          style={s.card}
-          onPress={() => router.push(`/summary/week/${w.id}`)}
-          activeOpacity={0.7}
-        >
-          <View style={s.cardTop}>
-            <Text style={s.cardLabel}>{w.label}</Text>
-            <Text style={s.cardScore}>{w.score} avg</Text>
-          </View>
-          <Text style={s.cardDates}>{w.dates}</Text>
-          <Text style={s.cardDays}>{w.days} active days</Text>
-        </TouchableOpacity>
-      ))}
+      {loading ? (
+        <ActivityIndicator color="#7F77DD" />
+      ) : items.length === 0 ? (
+        <Text style={s.empty}>Немає збережених звітів</Text>
+      ) : (
+        items.map(item => {
+          const key = toPeriodKey('week', item.period_start);
+          const label = periodLabel('week', item.period_start, item.period_end);
+          return (
+            <TouchableOpacity
+              key={key}
+              style={s.card}
+              onPress={() => router.push(`/summary/week/${encodeURIComponent(key)}`)}
+              activeOpacity={0.7}
+            >
+              <View style={s.cardTop}>
+                <Text style={s.cardLabel}>{label}</Text>
+                {item.avg_productivity != null && (
+                  <Text style={s.cardScore}>{item.avg_productivity.toFixed(1)} avg</Text>
+                )}
+              </View>
+              <Text style={s.cardMeta}>{item.active_days} активних днів</Text>
+            </TouchableOpacity>
+          );
+        })
+      )}
     </ScrollView>
   );
 }
@@ -41,6 +70,6 @@ const s = StyleSheet.create({
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   cardLabel: { fontSize: 15, fontWeight: '600', color: '#2C2C2A' },
   cardScore: { fontSize: 13, color: '#7F77DD', fontWeight: '500' },
-  cardDates: { fontSize: 13, color: '#5F5E5A', marginBottom: 2 },
-  cardDays: { fontSize: 12, color: '#B4B2A9' },
+  cardMeta: { fontSize: 12, color: '#B4B2A9' },
+  empty: { textAlign: 'center', marginTop: 40, fontSize: 14, color: '#B4B2A9' },
 });

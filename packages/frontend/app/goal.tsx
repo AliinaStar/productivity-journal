@@ -1,118 +1,105 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from "react-native";
-import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
-import { useState } from "react";
-import { Picker } from "@react-native-picker/picker";
+import { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { router } from 'expo-router';
+import { useGoals } from '@/db/goals';
+import { GoalStatus } from '@/db/types';
+
+const STATUS_OPTIONS: { label: string; value: GoalStatus }[] = [
+  { label: 'Активна', value: 'active' },
+  { label: 'Відкладена', value: 'postpone' },
+  { label: 'Завершена', value: 'finished' },
+];
 
 export default function GoalAdder() {
+  const goals = useGoals();
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState<Date | null>(null);
   const [showPicker, setShowPicker] = useState(false);
-  const [option, setOption] = useState("option1");
+  const [status, setStatus] = useState<GoalStatus>('active');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const onChange = (
-    event: DateTimePickerEvent,
-    selectedDate?: Date
-  ) => {
+  function onDateChange(_: DateTimePickerEvent, selected?: Date) {
     setShowPicker(false);
-    if (selectedDate) {
-      setDeadline(selectedDate);
+    if (selected) setDeadline(selected);
+  }
+
+  async function handleSave() {
+    if (!title.trim()) { setError('Введи назву цілі'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      await goals.create({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        deadline: deadline ? deadline.toISOString().split('T')[0] : undefined,
+        status,
+      });
+      router.back();
+    } catch {
+      setError('Помилка збереження');
+    } finally {
+      setSaving(false);
     }
-  };
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Назва цілі</Text>
+    <View style={s.container}>
+      <Text style={s.label}>Назва цілі</Text>
+      <TextInput style={s.input} placeholder="Напр. Бігти марафон" value={title} onChangeText={setTitle} />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Goal 1..."
-        multiline
-      />
+      <Text style={s.label}>Опис</Text>
+      <TextInput style={[s.input, s.multiline]} placeholder="Додатковий контекст..." value={description} onChangeText={setDescription} multiline />
 
-      <Text style={styles.title}>Опис цілі</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Note..."
-        multiline
-      />
-
-      <Text style={styles.title}>Дедлайн?</Text>
-
-      {/* Поле дати */}
-      <TouchableOpacity
-        style={styles.dateInput}
-        onPress={() => setShowPicker(true)}
-      >
-        <Text style={styles.dateText}>
-          {deadline
-            ? deadline.toLocaleDateString()
-            : "Натисни щоб вибрати дату"}
+      <Text style={s.label}>Дедлайн</Text>
+      <TouchableOpacity style={s.dateBtn} onPress={() => setShowPicker(true)}>
+        <Text style={s.dateBtnText}>
+          {deadline ? deadline.toLocaleDateString('uk-UA') : 'Вибрати дату'}
         </Text>
       </TouchableOpacity>
-
       {showPicker && (
-        <DateTimePicker
-          value={deadline || new Date()}
-          mode="date"
-          display="default"
-          onChange={onChange}
-        />
+        <DateTimePicker value={deadline ?? new Date()} mode="date" display="default" onChange={onDateChange} />
       )}
 
-      <Text style={styles.title}>Тип цілі</Text>
-
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={option}
-          onValueChange={(itemValue) => setOption(itemValue)}
-        >
-          <Picker.Item label="Звичка" value="option1" />
-          <Picker.Item label="Проєкт" value="option2" />
-          <Picker.Item label="Результат" value="option3" />
-        </Picker>
+      <Text style={s.label}>Статус</Text>
+      <View style={s.statusRow}>
+        {STATUS_OPTIONS.map(opt => (
+          <TouchableOpacity
+            key={opt.value}
+            style={[s.statusChip, status === opt.value && s.statusChipActive]}
+            onPress={() => setStatus(opt.value)}
+          >
+            <Text style={[s.statusChipText, status === opt.value && s.statusChipTextActive]}>
+              {opt.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
+
+      {error && <Text style={s.error}>{error}</Text>}
+
+      <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving} activeOpacity={0.8}>
+        {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Зберегти</Text>}
+      </TouchableOpacity>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: "#fff",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 8,
-  },
-  input: {
-    height: 100,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    padding: 12,
-    textAlignVertical: "top",
-    marginBottom: 20,
-  },
-  dateInput: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    padding: 14,
-    justifyContent: "center",
-    },
-  dateText: {
-    fontSize: 16,
-    color: "#333",
-    },
-  pickerContainer: { 
-    borderWidth: 1, 
-    borderColor: "#ccc", 
-    borderRadius: 5, 
-    width: "80%" }
+const s = StyleSheet.create({
+  container: { flex: 1, padding: 20, backgroundColor: '#F5F4F0' },
+  label: { fontSize: 13, fontWeight: '600', color: '#888780', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginTop: 16 },
+  input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, fontSize: 15, color: '#2C2C2A' },
+  multiline: { height: 90, textAlignVertical: 'top' },
+  dateBtn: { backgroundColor: '#fff', borderRadius: 12, padding: 14 },
+  dateBtnText: { fontSize: 15, color: '#2C2C2A' },
+  statusRow: { flexDirection: 'row', gap: 8 },
+  statusChip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: '#fff' },
+  statusChipActive: { backgroundColor: '#7F77DD' },
+  statusChipText: { fontSize: 13, color: '#888780' },
+  statusChipTextActive: { color: '#fff', fontWeight: '600' },
+  error: { fontSize: 13, color: '#993C1D', marginTop: 12 },
+  saveBtn: { backgroundColor: '#7F77DD', borderRadius: 12, padding: 15, alignItems: 'center', marginTop: 28 },
+  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

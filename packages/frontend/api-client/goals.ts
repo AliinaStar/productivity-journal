@@ -11,6 +11,14 @@ export interface RemoteGoal {
   status: GoalStatus;
 }
 
+export async function listGoals(userId: number): Promise<RemoteGoal[]> {
+  const res = await fetch(`${BASE_URL}/goals`, {
+    headers: { 'X-User-ID': String(userId) },
+  });
+  if (!res.ok) throw new Error(`Failed to list goals: ${res.status}`);
+  return res.json();
+}
+
 export async function createGoal(goal: Omit<Goal, 'id' | 'remote_id' | 'synced'>, userId: number): Promise<RemoteGoal> {
   const res = await fetch(`${BASE_URL}/goals`, {
     method: 'POST',

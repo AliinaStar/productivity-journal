@@ -1,5 +1,10 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { Entry } from './types';
+import { RemoteEntry } from '@/api-client/entries';
+
+function genId(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 export function useEntries() {
   const db = useSQLiteContext();
@@ -40,7 +45,7 @@ export function useEntries() {
     note: string;
     productivityScore: number;
   }): Promise<Entry> {
-    const id = crypto.randomUUID();
+    const id = genId();
     const created_at = new Date().toISOString();
 
     await db.runAsync(
@@ -89,6 +94,25 @@ export function useEntries() {
     );
   }
 
+  async function getByRemoteId(remoteId: number): Promise<Entry | null> {
+    return db.getFirstAsync<Entry>(
+      `SELECT * FROM entries WHERE remote_id = ?`,
+      [remoteId]
+    );
+  }
+
+  async function upsertFromRemote(remote: RemoteEntry, localGoalId: string): Promise<void> {
+    const existing = await getByRemoteId(remote.id);
+    if (existing) return;
+    const id = genId();
+    const created_at = new Date().toISOString();
+    await db.runAsync(
+      `INSERT INTO entries (id, goal_id, date_note, note, productivity_score, created_at, synced, remote_id)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+      [id, localGoalId, remote.date_note, remote.note, remote.productivity_score, created_at, remote.id]
+    );
+  }
+
   // Aggregate helpers for report generation
   async function getActiveDaysInRange(from: string, to: string): Promise<number> {
     const result = await db.getFirstAsync<{ count: number }>(
@@ -108,6 +132,10 @@ export function useEntries() {
     return result?.avg ?? null;
   }
 
+  async function clearAll(): Promise<void> {
+    await db.runAsync(`DELETE FROM entries`);
+  }
+
   return {
     getByGoal,
     getById,
@@ -118,6 +146,9 @@ export function useEntries() {
     remove,
     markSynced,
     getUnsynced,
+    getByRemoteId,
+    upsertFromRemote,
+    clearAll,
     getActiveDaysInRange,
     getAvgScoreInRange,
   };

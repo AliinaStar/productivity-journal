@@ -53,6 +53,19 @@ def _to_response(goal: Goal) -> GoalResponse:
     )
 
 
+@router.get("", response_model=list[GoalResponse])
+async def list_goals(
+    current_user: User = Depends(get_current_user),
+) -> list[GoalResponse]:
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        result = await session.execute(
+            select(Goal).where(Goal.user_id == current_user.id).order_by(Goal.created_at.desc())
+        )
+        goals = result.scalars().all()
+    return [_to_response(g) for g in goals]
+
+
 @router.post("", response_model=GoalResponse)
 async def create_goal(
     body: CreateGoalRequest,

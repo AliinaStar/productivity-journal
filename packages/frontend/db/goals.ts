@@ -1,5 +1,10 @@
 import { useSQLiteContext } from 'expo-sqlite';
 import { Goal, GoalStatus } from './types';
+import { RemoteGoal } from '@/api-client/goals';
+
+function genId(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 export function useGoals() {
   const db = useSQLiteContext();
@@ -29,7 +34,7 @@ export function useGoals() {
     deadline?: string;
     status?: GoalStatus;
   }): Promise<Goal> {
-    const id = crypto.randomUUID();
+    const id = genId();
     const created_at = new Date().toISOString().split('T')[0];
     const status = data.status ?? 'active';
 
@@ -81,5 +86,33 @@ export function useGoals() {
     );
   }
 
-  return { getAll, getById, getActive, create, update, remove, markSynced, getUnsynced };
+  async function getByRemoteId(remoteId: number): Promise<Goal | null> {
+    return db.getFirstAsync<Goal>(
+      `SELECT * FROM goals WHERE remote_id = ?`,
+      [remoteId]
+    );
+  }
+
+  async function upsertFromRemote(remote: RemoteGoal): Promise<void> {
+    const existing = await getByRemoteId(remote.id);
+    if (existing) {
+      await db.runAsync(
+        `UPDATE goals SET title = ?, description = ?, deadline = ?, status = ?, synced = 1 WHERE remote_id = ?`,
+        [remote.title, remote.description ?? null, remote.deadline ?? null, remote.status, remote.id]
+      );
+      return;
+    }
+    const id = genId();
+    await db.runAsync(
+      `INSERT INTO goals (id, title, description, deadline, created_at, status, synced, remote_id)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+      [id, remote.title, remote.description ?? null, remote.deadline ?? null, remote.created_at, remote.status, remote.id]
+    );
+  }
+
+  async function clearAll(): Promise<void> {
+    await db.runAsync(`DELETE FROM goals`);
+  }
+
+  return { getAll, getById, getActive, create, update, remove, markSynced, getUnsynced, getByRemoteId, upsertFromRemote, clearAll };
 }

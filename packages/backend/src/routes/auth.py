@@ -43,6 +43,7 @@ class VerifyCodeRequest(BaseModel):
 
 class VerifyCodeResponse(BaseModel):
     user_id: int
+    is_new: bool
 
 
 @router.post("/send-code", response_model=SendCodeResponse)
@@ -113,7 +114,8 @@ async def verify_code(body: VerifyCodeRequest) -> VerifyCodeResponse:
         )
         user = user_result.scalars().first()
 
-        if user is None:
+        is_new = user is None
+        if is_new:
             user = User(
                 name=body.email.split("@")[0],
                 email=body.email,
@@ -124,7 +126,7 @@ async def verify_code(body: VerifyCodeRequest) -> VerifyCodeResponse:
         await session.commit()
         await session.refresh(user)
 
-    return VerifyCodeResponse(user_id=user.id)
+    return VerifyCodeResponse(user_id=user.id, is_new=is_new)
 
 
 @router.post("/dev-login", response_model=VerifyCodeResponse)
@@ -142,7 +144,8 @@ async def dev_login(body: SendCodeRequest) -> VerifyCodeResponse:
         result = await session.execute(select(User).where(User.email == body.email))
         user = result.scalars().first()
 
-        if user is None:
+        is_new = user is None
+        if is_new:
             user = User(
                 name=body.email.split("@")[0],
                 email=body.email,
@@ -153,4 +156,4 @@ async def dev_login(body: SendCodeRequest) -> VerifyCodeResponse:
         await session.commit()
         await session.refresh(user)
 
-    return VerifyCodeResponse(user_id=user.id)
+    return VerifyCodeResponse(user_id=user.id, is_new=is_new)

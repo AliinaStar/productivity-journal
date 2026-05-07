@@ -20,6 +20,7 @@ from src.routes.entries import router as entries_router
 from src.routes.goals import router as goals_router
 from src.routes.health import router as health_router
 from src.routes.reports import router as reports_router
+from src.routes.users import router as users_router
 
 
 @asynccontextmanager
@@ -67,5 +68,6 @@ def create_app() -> FastAPI:
     app.include_router(goals_router)
     app.include_router(entries_router)
     app.include_router(reports_router)
+    app.include_router(users_router)
 
     return app

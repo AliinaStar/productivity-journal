@@ -1,37 +1,62 @@
-import { Text, TouchableOpacity, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
-
-const YEARS = [
-  { id: 'y1', label: '2025', score: '4.0', days: '268', entries: '147', headline: 'The year you stopped waiting for the right moment' },
-  { id: 'y2', label: '2024', score: '3.6', days: '210', entries: '98',  headline: 'Building the foundation' },
-  { id: 'y3', label: '2023', score: '3.2', days: '180', entries: '74',  headline: 'The year of first steps' },
-];
+import { useCallback, useState } from 'react';
+import { Text, TouchableOpacity, ScrollView, StyleSheet, View, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useReports } from '@/db/reports';
+import { useSync } from '@/hooks/useSync';
+import { ReportCache } from '@/db/types';
+import { toPeriodKey } from '@/utils/period';
 
 export default function YearList() {
   const router = useRouter();
+  const reports = useReports();
+  const { syncReports } = useSync();
+  const [items, setItems] = useState<ReportCache[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useFocusEffect(useCallback(() => {
+    async function load() {
+      try { await syncReports('year'); } catch {}
+      const data = await reports.getAll('year');
+      setItems(data);
+      setLoading(false);
+    }
+    load();
+  }, []));
 
   return (
     <ScrollView style={s.scroll} contentContainerStyle={s.content}>
       <Text style={s.header}>Yearly reports</Text>
-      {YEARS.map(y => (
-        <TouchableOpacity
-          key={y.id}
-          style={s.card}
-          onPress={() => router.push(`/summary/year/${y.id}`)}
-          activeOpacity={0.7}
-        >
-          <View style={s.cardTop}>
-            <Text style={s.cardLabel}>{y.label}</Text>
-            <Text style={s.cardScore}>{y.score} avg</Text>
-          </View>
-          <Text style={s.cardHeadline}>{y.headline}</Text>
-          <View style={s.cardBottom}>
-            <Text style={s.cardMeta}>{y.days} active days</Text>
-            <Text style={s.cardDot}>·</Text>
-            <Text style={s.cardMeta}>{y.entries} entries</Text>
-          </View>
-        </TouchableOpacity>
-      ))}
+      {loading ? (
+        <ActivityIndicator color="#7F77DD" />
+      ) : items.length === 0 ? (
+        <Text style={s.empty}>Немає збережених звітів</Text>
+      ) : (
+        items.map(item => {
+          const key = toPeriodKey('year', item.period_start);
+          const data = item.data ? JSON.parse(item.data) : null;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={s.card}
+              onPress={() => router.push(`/summary/year/${encodeURIComponent(key)}`)}
+              activeOpacity={0.7}
+            >
+              <View style={s.cardTop}>
+                <Text style={s.cardLabel}>{key}</Text>
+                {item.avg_productivity != null && (
+                  <Text style={s.cardScore}>{item.avg_productivity.toFixed(1)} avg</Text>
+                )}
+              </View>
+              {data?.summary ? (
+                <Text style={s.cardHeadline} numberOfLines={2}>{data.summary}</Text>
+              ) : null}
+              <View style={s.cardBottom}>
+                <Text style={s.cardMeta}>{item.active_days} активних днів</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })
+      )}
     </ScrollView>
   );
 }
@@ -44,8 +69,8 @@ const s = StyleSheet.create({
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   cardLabel: { fontSize: 15, fontWeight: '600', color: '#F1EFE8' },
   cardScore: { fontSize: 13, color: '#7F77DD', fontWeight: '500' },
-  cardHeadline: { fontSize: 13, color: '#AFA9EC', marginBottom: 8, lineHeight: 18, fontFamily: 'serif' },
+  cardHeadline: { fontSize: 13, color: '#AFA9EC', marginBottom: 8, lineHeight: 18 },
   cardBottom: { flexDirection: 'row', gap: 6 },
   cardMeta: { fontSize: 12, color: '#7F77DD' },
-  cardDot: { fontSize: 12, color: '#534AB7' },
+  empty: { textAlign: 'center', marginTop: 40, fontSize: 14, color: '#B4B2A9' },
 });

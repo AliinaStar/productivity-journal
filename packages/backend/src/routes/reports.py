@@ -113,6 +113,24 @@ async def generate_report(
     return _to_response(report)
 
 
+@router.get("/list", response_model=list[ReportResponse])
+async def list_reports(
+    period: Literal["week", "month", "year"] = Query(...),
+    current_user: User = Depends(get_current_user),
+) -> list[ReportResponse]:
+    """Return all stored reports for the current user for a given period type."""
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        result = await session.execute(
+            select(Report)
+            .where(Report.user_id == current_user.id)
+            .where(Report.period == period)
+            .order_by(Report.period_start.desc())
+        )
+        reports = result.scalars().all()
+    return [_to_response(r) for r in reports]
+
+
 @router.get("", response_model=ReportResponse | None)
 async def get_report(
     period: Literal["week", "month", "year"] = Query(...),

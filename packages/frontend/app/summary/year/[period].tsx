@@ -1,334 +1,248 @@
-import { ScrollView, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { ScrollView, View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { useReports } from '@/db/reports';
 
 const C = {
-  bg: '#F5F4F0',
-  heroBg: '#26215C',
-  card: '#FFFFFF',
-  purple: '#7F77DD',
-  purpleMid: '#534AB7',
-  purpleDark: '#26215C',
-  textPrimary: '#2C2C2A',
-  textSecondary: '#5F5E5A',
-  textMuted: '#888780',
-  border: '#EBEBEB',
-  subtleBg: '#F5F4F0',
+  bg: '#F5F4F0', heroBg: '#26215C', card: '#FFFFFF',
+  purple: '#7F77DD', purpleMid: '#534AB7', purpleDark: '#26215C',
+  textPrimary: '#2C2C2A', textSecondary: '#5F5E5A', textMuted: '#888780',
+  border: '#EBEBEB', subtleBg: '#F5F4F0',
 };
 
-const PILL_COLORS = {
-  teal:   { bg: '#E1F5EE', text: '#0F6E56' },
-  purple: { bg: '#EEEDFE', text: '#534AB7' },
-  coral:  { bg: '#FAECE7', text: '#993C1D' },
-  amber:  { bg: '#FAEEDA', text: '#854F0B' },
-  green:  { bg: '#EAF3DE', text: '#3B6D11' },
-};
+const PILL_COLORS = [
+  { bg: '#EEEDFE', text: '#534AB7' },
+  { bg: '#E1F5EE', text: '#0F6E56' },
+  { bg: '#FAECE7', text: '#993C1D' },
+  { bg: '#FAEEDA', text: '#854F0B' },
+  { bg: '#EAF3DE', text: '#3B6D11' },
+];
 
-const GOAL_STATUS = {
+const GOAL_STATUS: Record<string, { bg: string; text: string; label: string }> = {
   active:    { bg: '#E1F5EE', text: '#0F6E56', label: 'active' },
   completed: { bg: '#EEEDFE', text: '#534AB7', label: 'completed' },
   paused:    { bg: '#F1EFE8', text: '#888780', label: 'paused' },
 };
 
-const MOCK = {
-  eyebrow: '2025 · Yearly report',
-  headline: 'The year you stopped waiting for the right moment',
-  sub: '268 active days, three goals, and one shift in approach that changed everything.',
-  stats: [
-    { value: '268',   label: 'active days' },
-    { value: '4.0',   label: 'avg score' },
-    { value: '147',   label: 'total entries' },
-  ],
-  highlights: {
-    best:  { period: 'June',  reason: '24 active days, thesis breakthrough, exercise record. Everything clicked at once.' },
-    hard:  { period: 'March', reason: 'Two-week plateau, lowest scores of the year. Came back stronger in April.' },
-  },
-  goals: [
-    {
-      name: 'Thesis writing',
-      status: 'active' as keyof typeof GOAL_STATUS,
-      progress: 0.80,
-      color: '#1D9E75',
-      summary: 'From scattered ideas in January to a structured draft by December. The turning point was June — when you stopped planning how to write and started writing.',
-      comparison: 'Січневі записи — про те що треба зробити. Грудневі — про те що зроблено і що далі. Це інша людина пише.',
-      peak: 'Jun 18 · Chapter 2 fully drafted in one week. Score 5.0 три дні поспіль.',
-    },
-    {
-      name: 'Exercise',
-      status: 'active' as keyof typeof GOAL_STATUS,
-      progress: 0.74,
-      color: '#7F77DD',
-      summary: 'Started the year with ambitious plans, ended with sustainable habits. Total sessions almost doubled from H1 to H2 — not because of more effort, but less resistance.',
-      comparison: 'У лютому пропускала через "немає часу". У листопаді — через "не хочу". Різниця: тепер це звичка, а не намір.',
-      peak: 'Jun · 14 sessions — рекорд за весь рік. Low-friction підхід на піку.',
-    },
-    {
-      name: 'Reading',
-      status: 'completed' as keyof typeof GOAL_STATUS,
-      progress: 0.68,
-      color: '#D85A30',
-      summary: 'Goal completed in October — 24 books read, target was 20. Shifted to a new reading goal in November focused on research papers specifically.',
-      comparison: 'Ціль виконана і переросла сама себе. Це не провал планування — це ознака того що ціль була правильною.',
-      peak: 'Oct 3 · 24-та книга. Написала що це перший рік коли читання не здавалося зусиллям.',
-    },
-  ],
-  tone: {
-    word: 'Driven',
-    sub: 'рік з чіткою дугою',
-    activeSegs: [4, 5],
-    total: 7,
-    leftLabel: 'scattered',
-    rightLabel: 'focused',
-    desc: 'Рік не був рівним — але загальний вектор завжди йшов вперед. Навіть важкий березень не скинув темп надовго.',
-    quarters: [
-      { label: 'Q1', word: 'Drifting' },
-      { label: 'Q2', word: 'Focused' },
-      { label: 'Q3', word: 'Driven' },
-      { label: 'Q4', word: 'Steady' },
-    ],
-  },
-  patterns: [
-    {
-      title: 'Ранок — твій незамінний ресурс',
-      since: 'Помічено з квітня, підтверджено до грудня',
-      detail: 'З усіх сесій що отримали score 5.0 — 91% були до полудня. Це не перевага — це факт про те як влаштований твій мозок.',
-    },
-    {
-      title: 'Низький поріг входу = вищий результат',
-      since: 'Помічено з червня',
-      detail: 'Кожного разу коли ти знижувала планку старту — кількість сесій зростала, а середній score не падав. Амбітні плани системно давали менше ніж скромні старти.',
-    },
-    {
-      title: 'Спорт передбачає продуктивну тезу',
-      since: 'Помічено з серпня',
-      detail: 'У 78% випадків день після спортивної сесії давав вищий score по тезі ніж середній. Це найстабільніший кореляційний патерн року.',
-    },
-    {
-      title: 'Після зупинки — перший день завжди важкий',
-      since: 'Стабільний протягом усього року',
-      detail: 'Після будь-якої паузи 3+ дні перший запис стабільно нижчий за середній. Але другий день вже повертається до норми. Знання цього робить паузи менш страшними.',
-    },
-  ],
-  worked: [
-    { pill: 'Morning sessions', color: 'teal' as keyof typeof PILL_COLORS, detail: 'Найконсистентніший фактор року. Коли ранковий слот захищений — все інше вибудовується навколо нього.' },
-    { pill: 'One clear question', color: 'purple' as keyof typeof PILL_COLORS, detail: "З'явилося у червні, стало звичкою до вересня. Знизило activation cost кожної сесії до мінімуму." },
-    { pill: 'Low-friction starts', color: 'coral' as keyof typeof PILL_COLORS, detail: 'Працює для тези, для спорту, для читання. Універсальний принцип який ти відкрила емпірично за рік.' },
-    { pill: 'Supervisor check-ins', color: 'amber' as keyof typeof PILL_COLORS, detail: 'Чотири рази за рік розблоковували застрягання. Навчилася просити допомоги раніше ніж застрягала надовго.' },
-    { pill: 'Logging right after', color: 'green' as keyof typeof PILL_COLORS, detail: 'Записи написані одразу — в середньому на 40% довші і конкретніші. Саме вони дають матеріал для цього звіту.' },
-  ],
-  insight: 'Цей рік навчив тебе одному: опір на початку — це не сигнал що не готова. Це просто тертя. Ти навчилася відрізняти ці два відчуття — і це змінило все. Не результати. Підхід.',
-  nextYear: 'Захистити ранковий слот як незмінний — навіть у місяць з дедлайнами. Червень показав що це твій головний важіль. Все інше підлаштовується.',
-};
-
-function PatternItem({ title, since, detail }: { title: string; since: string; detail: string }) {
+function ExpandItem({ title, since, detail }: { title: string; since?: string; detail: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <View style={s.patternItem}>
-      <TouchableOpacity style={s.patternToggle} onPress={() => setOpen(o => !o)} activeOpacity={0.7}>
-        <View style={s.patternTitleWrap}>
-          <Text style={s.patternTitle}>{title}</Text>
-          <Text style={s.patternSince}>{since}</Text>
+    <View style={s.expandItem}>
+      <TouchableOpacity style={s.expandToggle} onPress={() => setOpen(o => !o)} activeOpacity={0.7}>
+        <View style={{ flex: 1, marginRight: 8 }}>
+          <Text style={s.expandTitle}>{title}</Text>
+          {since && <Text style={s.expandSince}>{since}</Text>}
         </View>
-        <Text style={[s.pChev, open && s.pChevOpen]}>›</Text>
+        <Text style={[s.chev, open && s.chevOpen]}>›</Text>
       </TouchableOpacity>
-      {open && <Text style={s.patternDetail}>{detail}</Text>}
+      {open && <Text style={s.expandDetail}>{detail}</Text>}
     </View>
   );
 }
 
-function WorkedItem({ pill, color, detail }: { pill: string; color: keyof typeof PILL_COLORS; detail: string }) {
+function WorkedItem({ title, description, index }: { title: string; description: string; index: number }) {
   const [open, setOpen] = useState(false);
-  const pc = PILL_COLORS[color];
+  const pc = PILL_COLORS[index % PILL_COLORS.length];
   return (
     <View style={s.wItem}>
       <TouchableOpacity style={s.wToggle} onPress={() => setOpen(o => !o)} activeOpacity={0.7}>
-        <Text style={[s.wPill, { backgroundColor: pc.bg, color: pc.text }]}>{pill}</Text>
-        <Text style={[s.wChev, open && s.wChevOpen]}>›</Text>
+        <Text style={[s.wPill, { backgroundColor: pc.bg, color: pc.text }]}>{title}</Text>
+        <Text style={[s.chev, open && s.chevOpen]}>›</Text>
       </TouchableOpacity>
-      {open && <Text style={s.wDetail}>{detail}</Text>}
+      {open && <Text style={s.wDetail}>{description}</Text>}
     </View>
   );
 }
 
 export default function YearReport() {
-  useLocalSearchParams<{ period: string }>();
-  const d = MOCK;
+  const { period } = useLocalSearchParams<{ period: string }>();
+  const reports = useReports();
+  const [data, setData] = useState<any>(null);
+  const [meta, setMeta] = useState<{ avg_productivity: number | null; active_days: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    reports.get('year', decodeURIComponent(period)).then(cached => {
+      if (cached) {
+        setData(JSON.parse(cached.data));
+        setMeta({ avg_productivity: cached.avg_productivity, active_days: cached.active_days });
+      }
+      setLoading(false);
+    });
+  }, [period]);
+
+  if (loading) return <ActivityIndicator style={s.loader} color={C.purple} />;
+  if (!data) return <Text style={s.error}>Звіт не знайдено</Text>;
+
+  const tone = data.tone ?? {};
+  const activeSegs = tone.scale ? Array.from({ length: tone.scale }, (_, i) => i) : [];
+  const highlights = data.highlights ?? {};
+  const quarters = tone.trend ? Object.entries(tone.trend).map(([q, w]) => ({ label: q, word: w as string })) : [];
 
   return (
     <ScrollView style={s.scroll} contentContainerStyle={s.content}>
-      {/* Hero — dark */}
       <View style={s.hero}>
-        <Text style={s.heroEyebrow}>{d.eyebrow}</Text>
-        <Text style={s.heroHeadline}>{d.headline}</Text>
-        <Text style={s.heroSub}>{d.sub}</Text>
+        <Text style={s.heroEyebrow}>{data.title ?? ''}</Text>
+        <Text style={s.heroSub}>{data.summary ?? ''}</Text>
         <View style={s.statsRow}>
-          {d.stats.map((st, i) => (
-            <View key={i} style={s.statCard}>
-              <Text style={s.statValue}>{st.value}</Text>
-              <Text style={s.statLabel}>{st.label}</Text>
+          {meta?.avg_productivity != null && (
+            <View style={s.statCard}>
+              <Text style={s.statValue}>{meta.avg_productivity.toFixed(1)}</Text>
+              <Text style={s.statLabel}>avg score</Text>
             </View>
-          ))}
-        </View>
-      </View>
-
-      {/* Highlights grid */}
-      <View style={s.hlGrid}>
-        <View style={[s.hlCard, s.hlBest]}>
-          <Text style={[s.hlTag, s.hlBestTag]}>Best moment</Text>
-          <Text style={[s.hlPeriod, s.hlBestPeriod]}>{d.highlights.best.period}</Text>
-          <Text style={[s.hlReason, s.hlBestReason]}>{d.highlights.best.reason}</Text>
-        </View>
-        <View style={[s.hlCard, s.hlHard]}>
-          <Text style={[s.hlTag, s.hlHardTag]}>Hardest moment</Text>
-          <Text style={[s.hlPeriod, s.hlHardPeriod]}>{d.highlights.hard.period}</Text>
-          <Text style={[s.hlReason, s.hlHardReason]}>{d.highlights.hard.reason}</Text>
-        </View>
-      </View>
-
-      {/* Goals */}
-      <View style={s.card}>
-        <Text style={s.clabel}>Goals</Text>
-        {d.goals.map((g, i) => {
-          const st = GOAL_STATUS[g.status];
-          return (
-            <View key={i} style={[s.goalRow, i === 0 && s.goalFirst, i === d.goals.length - 1 && s.goalLast]}>
-              <View style={s.goalHeader}>
-                <Text style={s.goalName}>{g.name}</Text>
-                <Text style={[s.goalStatus, { backgroundColor: st.bg, color: st.text }]}>{st.label}</Text>
-              </View>
-              <View style={s.barBg}>
-                <View style={[s.bar, { width: `${g.progress * 100}%` as any, backgroundColor: g.color }]} />
-              </View>
-              <Text style={s.goalSummary}>{g.summary}</Text>
-              <View style={s.goalBoxes}>
-                <View style={[s.goalBox, s.boxComp]}>
-                  <Text style={[s.boxLabel, s.boxCompLabel]}>Compared to start of year</Text>
-                  <Text style={[s.boxText, s.boxCompText]}>{g.comparison}</Text>
-                </View>
-                <View style={[s.goalBox, s.boxPeak]}>
-                  <Text style={[s.boxLabel, s.boxPeakLabel]}>Best moment</Text>
-                  <Text style={[s.boxText, s.boxPeakText]}>{g.peak}</Text>
-                </View>
-              </View>
+          )}
+          <View style={s.statCard}>
+            <Text style={s.statValue}>{meta?.active_days ?? 0}</Text>
+            <Text style={s.statLabel}>active days</Text>
+          </View>
+          {tone.word && (
+            <View style={s.statCard}>
+              <Text style={s.statValue}>{tone.word}</Text>
+              <Text style={s.statLabel}>tone</Text>
             </View>
-          );
-        })}
+          )}
+        </View>
       </View>
 
-      {/* Tone */}
-      <View style={s.card}>
-        <Text style={s.clabel}>Tone of the year</Text>
-        <View style={s.toneTop}>
-          <Text style={s.toneWord}>{d.tone.word}</Text>
-          <Text style={s.toneSub}>{d.tone.sub}</Text>
+      {(highlights.best || highlights.hardest) && (
+        <View style={s.hlGrid}>
+          {highlights.best && (
+            <View style={[s.hlCard, s.hlBest]}>
+              <Text style={[s.hlTag, { color: '#0F6E56' }]}>Best moment</Text>
+              <Text style={[s.hlPeriod, { color: '#085041' }]}>{highlights.best.period}</Text>
+              <Text style={[s.hlReason, { color: '#0F6E56' }]}>{highlights.best.reason}</Text>
+            </View>
+          )}
+          {highlights.hardest && (
+            <View style={[s.hlCard, s.hlHard]}>
+              <Text style={[s.hlTag, { color: '#993C1D' }]}>Hardest moment</Text>
+              <Text style={[s.hlPeriod, { color: '#4A1B0C' }]}>{highlights.hardest.period}</Text>
+              <Text style={[s.hlReason, { color: '#993C1D' }]}>{highlights.hardest.reason}</Text>
+            </View>
+          )}
         </View>
-        <View style={s.scale}>
-          {Array.from({ length: d.tone.total }).map((_, i) => (
-            <View key={i} style={[s.seg, d.tone.activeSegs.includes(i) && s.segOn]} />
-          ))}
-        </View>
-        <View style={s.scaleLabels}>
-          <Text style={s.scaleLbl}>{d.tone.leftLabel}</Text>
-          <Text style={s.scaleLbl}>{d.tone.rightLabel}</Text>
-        </View>
-        <Text style={s.toneDesc}>{d.tone.desc}</Text>
-        <View style={s.trendBox}>
-          <Text style={s.trendLabel}>По кварталах</Text>
-          <View style={s.trendRow}>
-            {d.tone.quarters.map((q, i) => (
-              <View key={i} style={s.trendQ}>
-                <Text style={s.tqLabel}>{q.label}</Text>
-                <Text style={s.tqWord}>{q.word}</Text>
+      )}
+
+      {data.goals?.length > 0 && (
+        <View style={s.card}>
+          <Text style={s.clabel}>Goals</Text>
+          {data.goals.map((g: any, i: number) => {
+            const st = GOAL_STATUS[g.status] ?? GOAL_STATUS.active;
+            return (
+              <View key={i} style={[s.goalRow, i === 0 && s.goalFirst, i === data.goals.length - 1 && s.goalLast]}>
+                <View style={s.goalHeader}>
+                  <Text style={s.goalName}>{g.name}</Text>
+                  <Text style={[s.goalStatus, { backgroundColor: st.bg, color: st.text }]}>{st.label}</Text>
+                </View>
+                <Text style={s.goalSummary}>{g.summary}</Text>
+                {g.comparison && (
+                  <View style={[s.goalBox, { backgroundColor: C.subtleBg, marginBottom: 5 }]}>
+                    <Text style={[s.boxLabel, { color: C.purple }]}>Compared to start of year</Text>
+                    <Text style={[s.boxText, { color: C.purpleMid }]}>{g.comparison}</Text>
+                  </View>
+                )}
+                {g.peak && (
+                  <View style={[s.goalBox, { backgroundColor: '#FAEEDA' }]}>
+                    <Text style={[s.boxLabel, { color: '#BA7517' }]}>Best moment</Text>
+                    <Text style={[s.boxText, { color: '#854F0B' }]}>{g.peak}</Text>
+                  </View>
+                )}
               </View>
+            );
+          })}
+        </View>
+      )}
+
+      {tone.word && (
+        <View style={s.card}>
+          <Text style={s.clabel}>Tone of the year</Text>
+          <Text style={s.toneWord}>{tone.word}</Text>
+          <View style={s.scale}>
+            {Array.from({ length: 7 }).map((_, i) => (
+              <View key={i} style={[s.seg, activeSegs.includes(i) && s.segOn]} />
             ))}
           </View>
+          <View style={s.scaleLabels}>
+            <Text style={s.scaleLbl}>scattered</Text>
+            <Text style={s.scaleLbl}>focused</Text>
+          </View>
+          <Text style={s.toneDesc}>{tone.description}</Text>
+          {quarters.length > 0 && (
+            <View style={s.trendBox}>
+              <Text style={s.trendLabel}>По кварталах</Text>
+              <View style={s.trendRow}>
+                {quarters.map((q, i) => (
+                  <View key={i} style={s.trendQ}>
+                    <Text style={s.tqLabel}>{q.label}</Text>
+                    <Text style={s.tqWord}>{q.word}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
-      </View>
+      )}
 
-      {/* Patterns */}
-      <View style={s.card}>
-        <Text style={s.clabel}>Patterns</Text>
-        {d.patterns.map((p, i) => (
-          <PatternItem key={i} {...p} />
-        ))}
-      </View>
+      {data.patterns?.length > 0 && (
+        <View style={s.card}>
+          <Text style={s.clabel}>Patterns</Text>
+          {data.patterns.map((p: any, i: number) => (
+            <ExpandItem key={i} title={p.title} since={p.first_seen} detail={p.description} />
+          ))}
+        </View>
+      )}
 
-      {/* What worked */}
-      <View style={[s.card, s.workedCard]}>
-        <Text style={[s.clabel, s.workedLabel]}>What worked</Text>
-        {d.worked.map((w, i) => (
-          <WorkedItem key={i} {...w} />
-        ))}
-      </View>
+      {data.what_worked?.length > 0 && (
+        <View style={[s.card, s.workedCard]}>
+          <Text style={[s.clabel, s.workedLabel]}>What worked</Text>
+          {data.what_worked.map((w: any, i: number) => (
+            <WorkedItem key={i} title={w.title} description={w.description} index={i} />
+          ))}
+        </View>
+      )}
 
-      {/* Insight — dark */}
-      <View style={s.insightCard}>
-        <Text style={s.insightLabel}>Insight</Text>
-        <Text style={s.insightText}>{d.insight}</Text>
-      </View>
-
-      {/* Next year hypothesis */}
-      <View style={s.nextCard}>
-        <Text style={s.nextLabel}>Hypothesis for next year</Text>
-        <Text style={s.nextText}>{d.nextYear}</Text>
-      </View>
+      {data.insight && (
+        <View style={s.insightCard}>
+          <Text style={s.insightLabel}>Insight</Text>
+          <Text style={s.insightText}>{data.insight}</Text>
+        </View>
+      )}
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
+  loader: { flex: 1 },
+  error: { flex: 1, textAlign: 'center', marginTop: 60, color: C.textMuted },
   scroll: { flex: 1, backgroundColor: C.bg },
   content: { padding: 14, gap: 10, paddingBottom: 32 },
-
   hero: { backgroundColor: C.heroBg, borderRadius: 18, padding: 16 },
-  heroEyebrow: { fontSize: 9, color: C.purple, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 },
-  heroHeadline: { fontSize: 22, fontWeight: '500', color: '#F1EFE8', lineHeight: 28, marginBottom: 6, fontFamily: 'serif' },
+  heroEyebrow: { fontSize: 13, fontWeight: '600', color: '#F1EFE8', marginBottom: 8 },
   heroSub: { fontSize: 13, color: '#AFA9EC', lineHeight: 20, marginBottom: 14 },
   statsRow: { flexDirection: 'row', gap: 7 },
   statCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: 8, alignItems: 'center' },
-  statValue: { fontSize: 17, fontWeight: '500', color: '#F1EFE8' },
+  statValue: { fontSize: 15, fontWeight: '600', color: '#F1EFE8' },
   statLabel: { fontSize: 9, color: C.purple, marginTop: 2 },
-
   hlGrid: { flexDirection: 'row', gap: 8 },
   hlCard: { flex: 1, borderRadius: 14, padding: 12 },
   hlBest: { backgroundColor: '#E1F5EE' },
   hlHard: { backgroundColor: '#FAECE7' },
   hlTag: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
-  hlBestTag: { color: '#0F6E56' },
-  hlHardTag: { color: '#993C1D' },
-  hlPeriod: { fontSize: 14, fontWeight: '500', fontFamily: 'serif', marginBottom: 4 },
-  hlBestPeriod: { color: '#085041' },
-  hlHardPeriod: { color: '#4A1B0C' },
+  hlPeriod: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
   hlReason: { fontSize: 11, lineHeight: 16 },
-  hlBestReason: { color: '#0F6E56' },
-  hlHardReason: { color: '#993C1D' },
-
   card: { backgroundColor: C.card, borderRadius: 18, padding: 14 },
   clabel: { fontSize: 9, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
-
   goalRow: { paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: C.border },
   goalFirst: { paddingTop: 0 },
   goalLast: { borderBottomWidth: 0, paddingBottom: 0 },
   goalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
-  goalName: { fontSize: 13, fontWeight: '500', color: C.textPrimary },
+  goalName: { fontSize: 13, fontWeight: '600', color: C.textPrimary, flex: 1, marginRight: 8 },
   goalStatus: { fontSize: 10, paddingVertical: 2, paddingHorizontal: 8, borderRadius: 20, overflow: 'hidden' },
-  barBg: { height: 3, backgroundColor: C.border, borderRadius: 2, marginBottom: 6 },
-  bar: { height: 3, borderRadius: 2 },
   goalSummary: { fontSize: 12, color: C.textPrimary, lineHeight: 18, marginBottom: 6 },
-  goalBoxes: { gap: 5 },
-  goalBox: { borderRadius: 8, padding: 8 },
-  boxComp: { backgroundColor: C.subtleBg },
-  boxPeak: { backgroundColor: '#FAEEDA' },
+  goalBox: { borderRadius: 8, padding: 8, marginBottom: 5 },
   boxLabel: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 },
-  boxCompLabel: { color: C.purple },
-  boxPeakLabel: { color: '#BA7517' },
   boxText: { fontSize: 11, lineHeight: 16 },
-  boxCompText: { color: C.purpleMid },
-  boxPeakText: { color: '#854F0B' },
-
-  toneTop: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginBottom: 10, marginTop: 6 },
-  toneWord: { fontSize: 26, fontWeight: '500', color: C.purpleDark, fontFamily: 'serif' },
-  toneSub: { fontSize: 11, color: C.textMuted },
+  toneWord: { fontSize: 24, fontWeight: '500', color: C.purpleDark, marginBottom: 10, marginTop: 4 },
   scale: { flexDirection: 'row', gap: 4, marginBottom: 7 },
   seg: { flex: 1, height: 5, borderRadius: 3, backgroundColor: C.border },
   segOn: { backgroundColor: C.purple },
@@ -341,30 +255,20 @@ const s = StyleSheet.create({
   trendQ: { flex: 1, alignItems: 'center' },
   tqLabel: { fontSize: 9, color: '#B4B2A9', marginBottom: 3 },
   tqWord: { fontSize: 11, fontWeight: '500', color: C.textPrimary },
-
-  patternItem: { paddingVertical: 9, borderBottomWidth: 0.5, borderBottomColor: C.border },
-  patternToggle: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
-  patternTitleWrap: { flex: 1 },
-  patternTitle: { fontSize: 13, fontWeight: '500', color: C.textPrimary, lineHeight: 18 },
-  patternSince: { fontSize: 10, color: '#B4B2A9', marginTop: 2 },
-  pChev: { fontSize: 18, color: '#C8C7C2', marginTop: 2 },
-  pChevOpen: { transform: [{ rotate: '90deg' }] },
-  patternDetail: { fontSize: 12, color: C.textSecondary, lineHeight: 19, paddingTop: 6 },
-
+  expandItem: { paddingVertical: 9, borderBottomWidth: 0.5, borderBottomColor: C.border },
+  expandToggle: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  expandTitle: { fontSize: 13, fontWeight: '500', color: C.textPrimary, lineHeight: 18 },
+  expandSince: { fontSize: 10, color: '#B4B2A9', marginTop: 2 },
+  expandDetail: { fontSize: 12, color: C.textSecondary, lineHeight: 19, paddingTop: 6 },
+  chev: { fontSize: 18, color: '#C8C7C2' },
+  chevOpen: { transform: [{ rotate: '90deg' }] },
   workedCard: { padding: 0, overflow: 'hidden' },
   workedLabel: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, marginBottom: 0, borderBottomWidth: 0.5, borderBottomColor: C.border },
   wItem: { borderBottomWidth: 0.5, borderBottomColor: C.border },
   wToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 11, paddingHorizontal: 16 },
-  wPill: { fontSize: 12, paddingVertical: 4, paddingHorizontal: 12, borderRadius: 20, overflow: 'hidden' },
-  wChev: { fontSize: 18, color: '#C8C7C2' },
-  wChevOpen: { transform: [{ rotate: '90deg' }] },
+  wPill: { fontSize: 12, paddingVertical: 4, paddingHorizontal: 12, borderRadius: 20, overflow: 'hidden', flex: 1, marginRight: 8 },
   wDetail: { fontSize: 12, color: C.textSecondary, lineHeight: 19, paddingHorizontal: 16, paddingBottom: 12 },
-
   insightCard: { backgroundColor: C.purpleDark, borderRadius: 18, padding: 14 },
   insightLabel: { fontSize: 9, color: C.purple, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
-  insightText: { fontSize: 14, color: '#F1EFE8', lineHeight: 22, fontFamily: 'serif', fontStyle: 'italic', marginBottom: 0 },
-
-  nextCard: { backgroundColor: '#EEEDFE', borderRadius: 18, padding: 14 },
-  nextLabel: { fontSize: 9, color: C.purple, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
-  nextText: { fontSize: 14, color: C.purpleDark, lineHeight: 22, fontFamily: 'serif' },
+  insightText: { fontSize: 14, color: '#F1EFE8', lineHeight: 22, fontStyle: 'italic' },
 });

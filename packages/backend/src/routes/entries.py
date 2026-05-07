@@ -62,6 +62,22 @@ async def _embed(text: str) -> list[float]:
     return vector.tolist()
 
 
+@router.get("", response_model=list[EntryResponse])
+async def list_entries(
+    current_user: User = Depends(get_current_user),
+) -> list[EntryResponse]:
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        result = await session.execute(
+            select(Entry)
+            .join(Goal, Entry.goal_id == Goal.id)
+            .where(Goal.user_id == current_user.id)
+            .order_by(Entry.date_note.desc())
+        )
+        entries = result.scalars().all()
+    return [_to_response(e) for e in entries]
+
+
 @router.post("", response_model=EntryResponse)
 async def create_entry(
     body: CreateEntryRequest,

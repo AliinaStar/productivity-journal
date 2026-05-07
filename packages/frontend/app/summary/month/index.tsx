@@ -1,34 +1,59 @@
-import { Text, TouchableOpacity, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
-
-const MONTHS = [
-  { id: 'm0', label: 'October 2025',  score: '5.0', days: '3 goals', headline: 'From starting to operating' },
-  { id: 'm1', label: 'June 2025',     score: '4.0', days: '24/30', headline: 'The month you figured out your rhythm' },
-  { id: 'm2', label: 'May 2025',      score: '3.6', days: '20/31', headline: 'Slow start, strong finish' },
-  { id: 'm3', label: 'April 2025',    score: '3.8', days: '22/30', headline: 'Finding consistency in small habits' },
-];
+import { useCallback, useState } from 'react';
+import { Text, TouchableOpacity, ScrollView, StyleSheet, View, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useReports } from '@/db/reports';
+import { useSync } from '@/hooks/useSync';
+import { ReportCache } from '@/db/types';
+import { toPeriodKey, periodLabel } from '@/utils/period';
 
 export default function MonthList() {
   const router = useRouter();
+  const reports = useReports();
+  const { syncReports } = useSync();
+  const [items, setItems] = useState<ReportCache[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useFocusEffect(useCallback(() => {
+    async function load() {
+      try { await syncReports('month'); } catch {}
+      const data = await reports.getAll('month');
+      setItems(data);
+      setLoading(false);
+    }
+    load();
+  }, []));
 
   return (
     <ScrollView style={s.scroll} contentContainerStyle={s.content}>
       <Text style={s.header}>Monthly reports</Text>
-      {MONTHS.map(m => (
-        <TouchableOpacity
-          key={m.id}
-          style={s.card}
-          onPress={() => router.push(`/summary/month/${m.id}`)}
-          activeOpacity={0.7}
-        >
-          <View style={s.cardTop}>
-            <Text style={s.cardLabel}>{m.label}</Text>
-            <Text style={s.cardScore}>{m.score} avg</Text>
-          </View>
-          <Text style={s.cardHeadline}>{m.headline}</Text>
-          <Text style={s.cardDays}>{m.days} active days</Text>
-        </TouchableOpacity>
-      ))}
+      {loading ? (
+        <ActivityIndicator color="#7F77DD" />
+      ) : items.length === 0 ? (
+        <Text style={s.empty}>Немає збережених звітів</Text>
+      ) : (
+        items.map(item => {
+          const key = toPeriodKey('month', item.period_start);
+          const label = periodLabel('month', item.period_start, item.period_end);
+          const data = item.data ? JSON.parse(item.data) : null;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={s.card}
+              onPress={() => router.push(`/summary/month/${encodeURIComponent(key)}`)}
+              activeOpacity={0.7}
+            >
+              <View style={s.cardTop}>
+                <Text style={s.cardLabel}>{label}</Text>
+                {item.avg_productivity != null && (
+                  <Text style={s.cardScore}>{item.avg_productivity.toFixed(1)} avg</Text>
+                )}
+              </View>
+              {data?.summary ? <Text style={s.cardHeadline} numberOfLines={2}>{data.summary}</Text> : null}
+              <Text style={s.cardMeta}>{item.active_days} активних днів</Text>
+            </TouchableOpacity>
+          );
+        })
+      )}
     </ScrollView>
   );
 }
@@ -42,5 +67,6 @@ const s = StyleSheet.create({
   cardLabel: { fontSize: 15, fontWeight: '600', color: '#2C2C2A' },
   cardScore: { fontSize: 13, color: '#7F77DD', fontWeight: '500' },
   cardHeadline: { fontSize: 13, color: '#5F5E5A', marginBottom: 4, lineHeight: 18 },
-  cardDays: { fontSize: 12, color: '#B4B2A9' },
+  cardMeta: { fontSize: 12, color: '#B4B2A9' },
+  empty: { textAlign: 'center', marginTop: 40, fontSize: 14, color: '#B4B2A9' },
 });

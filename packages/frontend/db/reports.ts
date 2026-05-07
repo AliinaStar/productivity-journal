@@ -25,7 +25,7 @@ export function useReports() {
 
   // Saves or replaces a report received from backend
   async function upsert(report: Omit<ReportCache, 'id' | 'cached_at'>): Promise<void> {
-    const id = crypto.randomUUID();
+    const id = `${report.period_type}-${report.period_key}`;
     const cached_at = new Date().toISOString();
 
     await db.runAsync(
@@ -63,5 +63,9 @@ export function useReports() {
     return JSON.parse(report.data) as T;
   }
 
-  return { get, getAll, upsert, remove, parse };
+  async function clearAll(): Promise<void> {
+    await db.runAsync(`DELETE FROM reports_cache`);
+  }
+
+  return { get, getAll, upsert, remove, parse, clearAll };
 }
