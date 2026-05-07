@@ -11,10 +11,10 @@ export interface RemoteGoal {
   status: GoalStatus;
 }
 
-export async function createGoal(goal: Omit<Goal, 'id' | 'remote_id' | 'synced'>): Promise<RemoteGoal> {
+export async function createGoal(goal: Omit<Goal, 'id' | 'remote_id' | 'synced'>, userId: number): Promise<RemoteGoal> {
   const res = await fetch(`${BASE_URL}/goals`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-User-ID': String(userId) },
     body: JSON.stringify({
       title:       goal.title,
       description: goal.description,
@@ -28,10 +28,10 @@ export async function createGoal(goal: Omit<Goal, 'id' | 'remote_id' | 'synced'>
   return res.json();
 }
 
-export async function updateGoal(remoteId: number, data: Partial<Pick<Goal, 'title' | 'description' | 'deadline' | 'status'>>): Promise<void> {
+export async function updateGoal(remoteId: number, data: Partial<Pick<Goal, 'title' | 'description' | 'deadline' | 'status'>>, userId: number): Promise<void> {
   const res = await fetch(`${BASE_URL}/goals/${remoteId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-User-ID': String(userId) },
     body: JSON.stringify(data),
   });
 

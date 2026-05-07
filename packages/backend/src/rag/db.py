@@ -4,9 +4,15 @@ All functions are async and use the shared ``get_async_sessionmaker`` singleton.
 No business logic lives here — only data access.
 """
 
-from datetime import date as date_type
+from collections import defaultdict
+from datetime import date as date_type, date
+
+import numpy as np
+from sqlalchemy import extract, func, select
+from sqlalchemy.orm import joinedload
 
 from src.db.models import Entry, Goal, Report, User
+from src.db.session import get_async_sessionmaker
 from src.rag.state import DateDict
 
 
@@ -22,7 +28,11 @@ def format_entries(entries: list[dict]) -> str:
         **Goal B**
         - note 3
     """
-    raise NotImplementedError
+    parts = []
+    for goal in entries:
+        notes_text = "\n".join(f"- {note}" for note in goal["notes"])
+        parts.append(f"**{goal['name']}**\n{notes_text}")
+    return "\n\n".join(parts) if parts else "No entries."
 
 
 def build_where_clause(period: str, date: DateDict, user_id: int):
@@ -31,20 +41,85 @@ def build_where_clause(period: str, date: DateDict, user_id: int):
     Supports ``'week'``, ``'month'``, and ``'year'`` periods.
     Uses ``extract()`` on ``Entry.date_note``.
     """
-    raise NotImplementedError
+    user_filter = Goal.user_id == user_id
+    if period == "year":
+        return user_filter & (extract("year", Entry.date_note) == date["year"])
+    elif period == "month":
+        return (
+            user_filter
+            & (extract("month", Entry.date_note) == date["month"])
+            & (extract("year", Entry.date_note) == date["year"])
+        )
+    else:
+        return (
+            user_filter
+            & (extract("week", Entry.date_note) == date["week"])
+            & (extract("year", Entry.date_note) == date["year"])
+        )
 
 
 async def query_entries(period: str, date: DateDict, user_id: int) -> dict:
     """Load current-period entries together with aggregate metrics.
 
     Returns a dict with keys:
-      - ``entries``          – list of ``{goal_id, name, notes}``
-      - ``raw_entries``      – list of ORM ``Entry`` objects (for embeddings)
-      - ``avg_productivity`` – float, rounded to 2 decimals
-      - ``active_days``      – int
+      - ``entries``            – list of ``{goal_id, name, notes}``
+      - ``raw_entries``        – list of ORM ``Entry`` objects (for embeddings)
+      - ``avg_productivity``   – float, rounded to 2 decimals
+      - ``active_days``        – int
       - ``goal_metrics_block`` – pre-formatted string for the LLM prompt
     """
-    raise NotImplementedError
+    session_factory = get_async_sessionmaker()
+    where_clause = build_where_clause(period, date, user_id)
+
+    async with session_factory() as session:
+        result = await session.execute(
+            select(Goal)
+            .options(joinedload(Goal.entries))
+            .join(Goal.entries)
+            .where(where_clause)
+        )
+        goals = result.unique().scalars().all()
+
+        metrics = await session.execute(
+            select(
+                func.round(func.avg(Entry.productivity_score), 2),
+                func.count(func.distinct(Entry.date_note)),
+            )
+            .join(Goal, Entry.goal_id == Goal.id)
+            .where(where_clause)
+        )
+        avg_productivity, active_days = metrics.one()
+
+        raw_entries_result = await session.execute(
+            select(Entry)
+            .join(Goal, Entry.goal_id == Goal.id)
+            .where(where_clause)
+            .order_by(Entry.date_note)
+        )
+        raw_entries = raw_entries_result.scalars().all()
+
+    entries = [
+        {"goal_id": goal.id, "name": goal.title, "notes": [e.note for e in goal.entries]}
+        for goal in goals
+    ]
+
+    goal_metrics_lines = []
+    for goal in goals:
+        if goal.entries:
+            active_days_goal = len({e.date_note for e in goal.entries})
+            avg_score = sum(e.productivity_score for e in goal.entries) / len(goal.entries)
+            goal_metrics_lines.append(
+                f"- {goal.id}: {goal.title}: {active_days_goal} active days,"
+                f" avg score {avg_score:.1f}"
+            )
+
+    return {
+        "entries": entries,
+        "avg_productivity": float(avg_productivity or 0),
+        "active_days": int(active_days or 0),
+        "goal_metrics_block": "\n".join(goal_metrics_lines),
+        "raw_entries": list(raw_entries),
+    }
 
 
 async def query_sub_period_reports(
@@ -59,12 +134,45 @@ async def query_sub_period_reports(
 
     Returns rows ordered by ``period_start`` ascending.
     """
-    raise NotImplementedError
+    session_factory = get_async_sessionmaker()
+    sub_period = "week" if period == "month" else "month"
+
+    async with session_factory() as session:
+        stmt = (
+            select(Report)
+            .where(Report.user_id == user_id)
+            .where(Report.period == sub_period)
+        )
+        if period == "month":
+            stmt = stmt.where(
+                extract("month", Report.period_start) == date["month"],
+                extract("year", Report.period_start) == date["year"],
+            )
+        else:
+            stmt = stmt.where(
+                extract("year", Report.period_start) == date["year"],
+            )
+        result = await session.execute(stmt.order_by(Report.period_start))
+        return list(result.scalars().all())
 
 
-async def get_user(user_id: int) -> User:
+async def get_user(user_id: int) -> User | None:
     """Fetch a single ``User`` row by primary key."""
-    raise NotImplementedError
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        return await session.get(User, user_id)
+
+
+async def get_all_users() -> list[User]:
+    """Fetch all ``User`` rows from the DB.
+
+    Used by the scheduler to iterate over users when running a batch
+    report generation job.
+    """
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        result = await session.execute(select(User))
+        return list(result.scalars().all())
 
 
 async def count_available_months(user_id: int, before_date: date_type) -> int:
@@ -72,7 +180,16 @@ async def count_available_months(user_id: int, before_date: date_type) -> int:
 
     Used by ``retrieve_similar`` to populate ``total_available_months`` in context.
     """
-    raise NotImplementedError
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        result = await session.execute(
+            select(Entry.date_note)
+            .join(Goal, Entry.goal_id == Goal.id)
+            .where(Goal.user_id == user_id)
+            .where(Entry.date_note < before_date)
+        )
+        dates = result.scalars().all()
+    return len({d.strftime("%Y-%m") for d in dates})
 
 
 async def compute_pool_avg_similarity(
@@ -84,16 +201,28 @@ async def compute_pool_avg_similarity(
     Returns ``None`` when fewer than two embedded entries exist.
     Used as a diversity baseline for evaluation metrics.
     """
-    raise NotImplementedError
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        result = await session.execute(
+            select(Entry)
+            .join(Goal, Entry.goal_id == Goal.id)
+            .where(Goal.user_id == user_id)
+            .where(Entry.date_note < before_date)
+            .where(Entry.embedding.isnot(None))
+        )
+        entries = result.scalars().all()
 
+    if len(entries) < 2:
+        return None
 
-async def get_all_users() -> list[User]:
-    """Fetch all ``User`` rows from the DB.
-
-    Used by the scheduler to iterate over users when running a batch
-    report generation job.
-    """
-    raise NotImplementedError
+    mat = np.array([list(e.embedding) for e in entries], dtype=np.float32)
+    norms = np.linalg.norm(mat, axis=1, keepdims=True)
+    norms = np.where(norms == 0, 1.0, norms)
+    mat = mat / norms
+    sim = mat @ mat.T
+    n = len(mat)
+    mask = np.triu(np.ones((n, n), dtype=bool), k=1)
+    return float(sim[mask].mean())
 
 
 async def save_report(
@@ -121,4 +250,19 @@ async def save_report(
     Returns:
         The newly created ``Report`` ORM object with its ``id`` populated.
     """
-    raise NotImplementedError
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        row = Report(
+            user_id=user_id,
+            period=period,
+            period_start=period_start,
+            period_end=period_end,
+            avg_productivity=avg_productivity,
+            active_days=active_days,
+            created_at=date.today(),
+            final_report=final_report,
+        )
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+        return row

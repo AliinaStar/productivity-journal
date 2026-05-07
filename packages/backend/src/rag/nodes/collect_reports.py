@@ -6,17 +6,27 @@ Structurally identical to ``retrieve_entries`` but feeds into
 into ``create_report``.
 """
 
+from src.rag import db
 from src.rag.state import ReportState
 
 
 async def collect_reports(state: ReportState) -> dict:
-    """Load current-period entries and user info for month / year reports.
+    """Load current-period entries and user info for month / year reports."""
+    period = state["period"]
+    date = state["date"]
+    user_id = state["user_id"]
 
-    Calls ``db.query_entries`` and ``db.get_user``.
+    current = await db.query_entries(period, date, user_id)
+    user = await db.get_user(user_id)
 
-    Returns fields:
-      current_entries, prev_entries=[], sub_period_reports=None,
-      summary_tokens_used=0, avg_productivity, active_days,
-      goal_metrics_block, language, gender.
-    """
-    raise NotImplementedError
+    return {
+        "current_entries": current["entries"],
+        "prev_entries": [],
+        "sub_period_reports": None,
+        "summary_tokens_used": 0,
+        "avg_productivity": current["avg_productivity"],
+        "active_days": current["active_days"],
+        "goal_metrics_block": current["goal_metrics_block"],
+        "language": user.language,
+        "gender": user.gender,
+    }

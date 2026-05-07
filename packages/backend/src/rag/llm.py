@@ -9,13 +9,19 @@ from functools import lru_cache
 
 from langchain_openai import ChatOpenAI
 
+from src.core.settings import get_settings
+
 
 @lru_cache(maxsize=1)
 def get_llm() -> ChatOpenAI:
     """Create and cache a ``ChatOpenAI`` instance from ``AppSettings``.
 
     Reads ``openai_api_key`` and ``llm_model`` from settings.
-    ``trust_env=False`` is set to prevent accidental reads from shell
-    environment variables when the ``.env`` file is the source of truth.
     """
-    raise NotImplementedError
+    settings = get_settings()
+    return ChatOpenAI(
+        model=settings.llm_model,
+        api_key=settings.openai_api_key,
+        timeout=60,
+        max_retries=2,
+    )

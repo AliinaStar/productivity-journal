@@ -14,10 +14,10 @@ export interface RemoteReport {
 }
 
 // Запит на генерацію звіту (бекенд запускає RAG pipeline)
-export async function requestReport(period: PeriodType, periodStart: string, periodEnd: string): Promise<RemoteReport> {
+export async function requestReport(period: PeriodType, periodStart: string, periodEnd: string, userId: number): Promise<RemoteReport> {
   const res = await fetch(`${BASE_URL}/reports/generate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-User-ID': String(userId) },
     body: JSON.stringify({ period, period_start: periodStart, period_end: periodEnd }),
   });
 
@@ -26,10 +26,11 @@ export async function requestReport(period: PeriodType, periodStart: string, per
 }
 
 // Отримати вже збережений звіт з бекенду
-export async function fetchReport(period: PeriodType, periodStart: string): Promise<RemoteReport | null> {
-  const res = await fetch(`${BASE_URL}/reports?period=${period}&period_start=${periodStart}`);
+export async function fetchReport(period: PeriodType, periodStart: string, userId: number): Promise<RemoteReport | null> {
+  const res = await fetch(`${BASE_URL}/reports?period=${period}&period_start=${periodStart}`, {
+    headers: { 'X-User-ID': String(userId) },
+  });
 
-  if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Failed to fetch report: ${res.status}`);
   return res.json();
 }

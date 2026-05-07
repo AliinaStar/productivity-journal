@@ -17,7 +17,12 @@ Steps:
 
 from datetime import date as date_type
 
-from src.db.models import Entry
+import numpy as np
+from sqlalchemy import select
+
+from src.db.models import Entry, Goal
+from src.db.session import get_async_sessionmaker
+from src.rag.embeddings import get_embedding_model
 
 
 async def retrieve_similar_mmr(
@@ -35,10 +40,47 @@ async def retrieve_similar_mmr(
         before_date: Only entries strictly before this date are considered.
         top_k:       Final number of entries to return.
         fetch_k:     Candidate pool size before MMR re-ranking.
-                     Must be >= *top_k*; clamped to the number of available entries.
+                     Clamped to the number of available entries.
 
     Returns:
         ORM ``Entry`` objects ordered by MMR selection (most relevant/diverse first).
         Returns an empty list when no embedded entries exist before *before_date*.
     """
-    raise NotImplementedError
+    model = get_embedding_model()
+    query_emb = model.encode(query_text, normalize_embeddings=True)
+
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        result = await session.execute(
+            select(Entry)
+            .join(Goal, Entry.goal_id == Goal.id)
+            .where(Goal.user_id == user_id)
+            .where(Entry.embedding.isnot(None))
+            .where(Entry.date_note < before_date)
+        )
+        entries = result.scalars().all()
+
+    if not entries:
+        return []
+
+    embeddings_matrix = np.array([list(e.embedding) for e in entries])
+    relevance = embeddings_matrix @ query_emb
+
+    fetch_k = min(fetch_k, len(entries))
+    candidate_idx = np.argsort(relevance)[::-1][:fetch_k].tolist()
+    candidate_relevance = relevance[candidate_idx]
+    candidate_embs = embeddings_matrix[candidate_idx]
+
+    selected_local: list[int] = []
+    for _ in range(min(top_k, fetch_k)):
+        if not selected_local:
+            best_local = int(np.argmax(candidate_relevance))
+        else:
+            selected_embs = candidate_embs[selected_local]
+            redundancy = (candidate_embs @ selected_embs.T).max(axis=1)
+            mmr_score = 0.5 * candidate_relevance - 0.5 * redundancy
+            mmr_score[selected_local] = -np.inf
+            best_local = int(np.argmax(mmr_score))
+        selected_local.append(best_local)
+
+    return [entries[candidate_idx[i]] for i in selected_local]

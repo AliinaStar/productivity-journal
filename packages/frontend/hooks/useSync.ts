@@ -20,14 +20,22 @@ export function useSync() {
   const reports = useReports();
   const syncMeta = useSyncMeta();
 
+  async function requireUserId(): Promise<number> {
+    const userId = await syncMeta.getUserRemoteId();
+    if (!userId) throw new Error('User not authenticated.');
+    return userId;
+  }
+
   // Push local unsynced data → backend
   // Goals must go before entries (entries reference goal remote_id)
   async function pushChanges(): Promise<void> {
+    const userId = await requireUserId();
+
     // 1. Sync unsynced goals
     const unsyncedGoals = await goals.getUnsynced();
 
     for (const goal of unsyncedGoals) {
-      const remote = await GoalsApi.createGoal(goal);
+      const remote = await GoalsApi.createGoal(goal, userId);
       await goals.markSynced(goal.id, remote.id);
     }
 
@@ -43,7 +51,7 @@ export function useSync() {
         continue;
       }
 
-      const remote = await EntriesApi.createEntry(entry, localGoal.remote_id);
+      const remote = await EntriesApi.createEntry(entry, localGoal.remote_id, userId);
       await entries.markSynced(entry.id, remote.id);
     }
   }
@@ -55,7 +63,8 @@ export function useSync() {
     periodStart: string,
     periodEnd: string,
   ): Promise<void> {
-    const remote = await ReportsApi.fetchReport(period, periodStart);
+    const userId = await requireUserId();
+    const remote = await ReportsApi.fetchReport(period, periodStart, userId);
 
     if (!remote?.final_report) return;
 
@@ -77,7 +86,8 @@ export function useSync() {
     periodStart: string,
     periodEnd: string,
   ): Promise<void> {
-    const remote = await ReportsApi.requestReport(period, periodStart, periodEnd);
+    const userId = await requireUserId();
+    const remote = await ReportsApi.requestReport(period, periodStart, periodEnd, userId);
 
     if (!remote?.final_report) return;
 

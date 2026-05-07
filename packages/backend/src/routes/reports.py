@@ -3,48 +3,38 @@
 Endpoints:
   POST /reports/generate  – run the RAG pipeline for a given period
   GET  /reports           – fetch an already-stored report from the DB
-
-Both endpoints identify the user via the ``get_current_user`` dependency
-(reads ``X-User-ID`` header set by the mobile client after login).
-
-Frontend contract (api-client/reports.ts):
-  POST body:  { period, period_start, period_end }
-  GET params: ?period=week&period_start=2025-04-07
-  Response:   RemoteReport shape (id, period, period_start, period_end,
-              avg_productivity, active_days, created_at, final_report)
 """
 
+import json
+from datetime import date, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from src.core.dependencies import get_current_user
-from src.db.models import User
+from src.db.models import Report, User
+from src.db.session import get_async_sessionmaker
+from src.rag import db as rag_db
+from src.rag.pipeline import app as pipeline
+from src.rag.state import DateDict
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
-
-# ---------------------------------------------------------------------------
-# Shared response schema  (matches RemoteReport on the frontend)
-# ---------------------------------------------------------------------------
 
 class ReportResponse(BaseModel):
     """Matches the ``RemoteReport`` interface in ``api-client/reports.ts``."""
 
     id: int
     period: str
-    period_start: str   # ISO date, e.g. "2025-04-07"
+    period_start: str
     period_end: str
     avg_productivity: float | None
     active_days: int
     created_at: str
     final_report: dict | None
 
-
-# ---------------------------------------------------------------------------
-# POST /reports/generate
-# ---------------------------------------------------------------------------
 
 class GenerateReportRequest(BaseModel):
     """Matches the body sent by ``requestReport()`` on the frontend."""
@@ -54,6 +44,30 @@ class GenerateReportRequest(BaseModel):
     period_end: str     # ISO date string, e.g. "2025-04-13"
 
 
+def _to_response(report: Report) -> ReportResponse:
+    return ReportResponse(
+        id=report.id,
+        period=report.period,
+        period_start=report.period_start.isoformat(),
+        period_end=report.period_end.isoformat(),
+        avg_productivity=report.avg_productivity,
+        active_days=report.active_days,
+        created_at=report.created_at.isoformat(),
+        final_report=report.final_report,
+    )
+
+
+def _date_to_dict(period: str, period_start: date) -> DateDict:
+    """Convert an ISO period_start date to a ``DateDict`` for the pipeline."""
+    if period == "week":
+        iso = period_start.isocalendar()
+        return {"year": iso.year, "week": iso.week}
+    elif period == "month":
+        return {"year": period_start.year, "month": period_start.month}
+    else:
+        return {"year": period_start.year}
+
+
 @router.post("/generate", response_model=ReportResponse)
 async def generate_report(
     body: GenerateReportRequest,
@@ -61,20 +75,43 @@ async def generate_report(
 ) -> ReportResponse:
     """Run the RAG pipeline and persist the result for the current user.
 
-    Converts ``period_start`` / ``period_end`` strings to a ``DateDict``
-    before invoking the pipeline, then saves the result via ``db.save_report``.
-
     Raises:
-        404: User not found (should not happen if auth works correctly).
         422: No entries exist for the requested period.
         500: LLM generation or structured-output parsing failed.
     """
-    raise NotImplementedError
+    period_start = date.fromisoformat(body.period_start)
+    period_end = date.fromisoformat(body.period_end)
+    date_dict = _date_to_dict(body.period, period_start)
 
+    try:
+        state = await pipeline.ainvoke({
+            "period": body.period,
+            "date": date_dict,
+            "user_id": current_user.id,
+        })
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
 
-# ---------------------------------------------------------------------------
-# GET /reports
-# ---------------------------------------------------------------------------
+    if not state or not state.get("final_report"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No entries found for the requested period.",
+        )
+
+    report = await rag_db.save_report(
+        user_id=current_user.id,
+        period=body.period,
+        period_start=period_start,
+        period_end=period_end,
+        avg_productivity=state.get("avg_productivity"),
+        active_days=state.get("active_days", 0),
+        final_report=json.loads(state["final_report"]),
+    )
+    return _to_response(report)
+
 
 @router.get("", response_model=ReportResponse | None)
 async def get_report(
@@ -84,9 +121,17 @@ async def get_report(
 ) -> ReportResponse | None:
     """Return a stored report for the current user, or ``null`` if not found.
 
-    Matches the ``fetchReport()`` call in ``api-client/reports.ts``.
-    Returns HTTP 200 with ``null`` body (not 404) when the report does not
-    exist yet — the frontend uses this to decide whether to show a
-    'Generate' button.
+    Returns HTTP 200 with ``null`` body when the report does not exist yet.
     """
-    raise NotImplementedError
+    start = date.fromisoformat(period_start)
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        result = await session.execute(
+            select(Report)
+            .where(Report.user_id == current_user.id)
+            .where(Report.period == period)
+            .where(Report.period_start == start)
+        )
+        report = result.scalars().first()
+
+    return _to_response(report) if report else None

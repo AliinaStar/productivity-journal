@@ -20,4 +20,7 @@ def get_embedding_model() -> SentenceTransformer:
     Subsequent calls return the cached instance without re-loading weights.
     ``trust_remote_code=True`` is required by the GTE model.
     """
-    raise NotImplementedError
+    return SentenceTransformer(
+        "Alibaba-NLP/gte-multilingual-base",
+        trust_remote_code=True,
+    )

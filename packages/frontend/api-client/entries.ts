@@ -12,11 +12,12 @@ export interface RemoteEntry {
 
 export async function createEntry(
   entry: Omit<Entry, 'id' | 'remote_id' | 'synced' | 'goal_id'>,
-  remoteGoalId: number
+  remoteGoalId: number,
+  userId: number,
 ): Promise<RemoteEntry> {
   const res = await fetch(`${BASE_URL}/entries`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-User-ID': String(userId) },
     body: JSON.stringify({
       goal_id:            remoteGoalId,
       date_note:          entry.date_note,
@@ -31,11 +32,12 @@ export async function createEntry(
 
 export async function updateEntry(
   remoteId: number,
-  data: Partial<Pick<Entry, 'note' | 'productivity_score' | 'date_note'>>
+  data: Partial<Pick<Entry, 'note' | 'productivity_score' | 'date_note'>>,
+  userId: number,
 ): Promise<void> {
   const res = await fetch(`${BASE_URL}/entries/${remoteId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-User-ID': String(userId) },
     body: JSON.stringify(data),
   });
 
