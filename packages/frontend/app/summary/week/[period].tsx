@@ -12,10 +12,10 @@ const C = {
 
 const PILL_COLORS = [
   { bg: '#EEEDFE', text: '#534AB7' },
-  { bg: '#E1F5EE', text: '#0F6E56' },
-  { bg: '#FAECE7', text: '#993C1D' },
-  { bg: '#FAEEDA', text: '#854F0B' },
-  { bg: '#EAF3DE', text: '#3B6D11' },
+  { bg: '#E4DFFF', text: '#3D3590' },
+  { bg: '#DDD8FF', text: '#26215C' },
+  { bg: '#F0EEFF', text: '#6A63C4' },
+  { bg: '#E8E4FF', text: '#4A4290' },
 ];
 
 function WorkedItem({ title, description, index }: { title: string; description: string; index: number }) {

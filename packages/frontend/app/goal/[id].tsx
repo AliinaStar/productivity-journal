@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useGoals } from '@/db/goals';
 import { useEntries } from '@/db/entries';
 
 export default function AddEntryScreen() {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const goals = useGoals();
   const entries = useEntries();
@@ -20,7 +22,7 @@ export default function AddEntryScreen() {
   }, [id]);
 
   async function handleSave() {
-    if (!note.trim()) { setError('Напиши нотатку'); return; }
+    if (!note.trim()) { setError(t('entry.errorEmpty')); return; }
     setSaving(true);
     setError(null);
     try {
@@ -32,7 +34,7 @@ export default function AddEntryScreen() {
       });
       router.back();
     } catch {
-      setError('Помилка збереження');
+      setError(t('entry.errorSave'));
     } finally {
       setSaving(false);
     }
@@ -42,17 +44,17 @@ export default function AddEntryScreen() {
     <View style={s.container}>
       <Text style={s.goalName}>{goalTitle}</Text>
 
-      <Text style={s.label}>Що ти зробила сьогодні?</Text>
+      <Text style={s.label}>{t('entry.noteLabel')}</Text>
       <TextInput
         style={s.input}
-        placeholder="Напиши тут..."
+        placeholder={t('entry.notePlaceholder')}
         placeholderTextColor="#B4B2A9"
         value={note}
         onChangeText={setNote}
         multiline
       />
 
-      <Text style={s.label}>Відчуття прогресу</Text>
+      <Text style={s.label}>{t('entry.scoreLabel')}</Text>
       <View style={s.stars}>
         {[1, 2, 3, 4, 5].map(n => (
           <TouchableOpacity key={n} onPress={() => setScore(n)} activeOpacity={0.7}>
@@ -64,7 +66,7 @@ export default function AddEntryScreen() {
       {error && <Text style={s.error}>{error}</Text>}
 
       <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving} activeOpacity={0.8}>
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Зберегти</Text>}
+        {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>{t('entry.save')}</Text>}
       </TouchableOpacity>
     </View>
   );

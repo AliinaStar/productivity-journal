@@ -12,16 +12,16 @@ const C = {
 
 const PILL_COLORS = [
   { bg: '#EEEDFE', text: '#534AB7' },
-  { bg: '#E1F5EE', text: '#0F6E56' },
-  { bg: '#FAECE7', text: '#993C1D' },
-  { bg: '#FAEEDA', text: '#854F0B' },
-  { bg: '#EAF3DE', text: '#3B6D11' },
+  { bg: '#E4DFFF', text: '#3D3590' },
+  { bg: '#DDD8FF', text: '#26215C' },
+  { bg: '#F0EEFF', text: '#6A63C4' },
+  { bg: '#E8E4FF', text: '#4A4290' },
 ];
 
 const GOAL_STATUS: Record<string, { bg: string; text: string; label: string }> = {
-  active:    { bg: '#E1F5EE', text: '#0F6E56', label: 'active' },
-  completed: { bg: '#EEEDFE', text: '#534AB7', label: 'completed' },
-  paused:    { bg: '#F1EFE8', text: '#888780', label: 'paused' },
+  active:    { bg: '#EEEDFE', text: '#534AB7', label: 'active' },
+  completed: { bg: '#E4DFFF', text: '#26215C', label: 'completed' },
+  paused:    { bg: '#F5F4F0', text: '#888780', label: 'paused' },
 };
 
 function ExpandItem({ title, since, detail }: { title: string; since?: string; detail: string }) {
@@ -108,16 +108,16 @@ export default function YearReport() {
         <View style={s.hlGrid}>
           {highlights.best && (
             <View style={[s.hlCard, s.hlBest]}>
-              <Text style={[s.hlTag, { color: '#0F6E56' }]}>Best moment</Text>
-              <Text style={[s.hlPeriod, { color: '#085041' }]}>{highlights.best.period}</Text>
-              <Text style={[s.hlReason, { color: '#0F6E56' }]}>{highlights.best.reason}</Text>
+              <Text style={[s.hlTag, { color: '#534AB7' }]}>Best moment</Text>
+              <Text style={[s.hlPeriod, { color: '#26215C' }]}>{highlights.best.period}</Text>
+              <Text style={[s.hlReason, { color: '#534AB7' }]}>{highlights.best.reason}</Text>
             </View>
           )}
           {highlights.hardest && (
             <View style={[s.hlCard, s.hlHard]}>
-              <Text style={[s.hlTag, { color: '#993C1D' }]}>Hardest moment</Text>
-              <Text style={[s.hlPeriod, { color: '#4A1B0C' }]}>{highlights.hardest.period}</Text>
-              <Text style={[s.hlReason, { color: '#993C1D' }]}>{highlights.hardest.reason}</Text>
+              <Text style={[s.hlTag, { color: '#3D3590' }]}>Hardest moment</Text>
+              <Text style={[s.hlPeriod, { color: '#26215C' }]}>{highlights.hardest.period}</Text>
+              <Text style={[s.hlReason, { color: '#3D3590' }]}>{highlights.hardest.reason}</Text>
             </View>
           )}
         </View>
@@ -142,9 +142,9 @@ export default function YearReport() {
                   </View>
                 )}
                 {g.peak && (
-                  <View style={[s.goalBox, { backgroundColor: '#FAEEDA' }]}>
-                    <Text style={[s.boxLabel, { color: '#BA7517' }]}>Best moment</Text>
-                    <Text style={[s.boxText, { color: '#854F0B' }]}>{g.peak}</Text>
+                  <View style={[s.goalBox, { backgroundColor: '#E8E4FF' }]}>
+                    <Text style={[s.boxLabel, { color: '#534AB7' }]}>Best moment</Text>
+                    <Text style={[s.boxText, { color: '#3D3590' }]}>{g.peak}</Text>
                   </View>
                 )}
               </View>
@@ -225,8 +225,8 @@ const s = StyleSheet.create({
   statLabel: { fontSize: 9, color: C.purple, marginTop: 2 },
   hlGrid: { flexDirection: 'row', gap: 8 },
   hlCard: { flex: 1, borderRadius: 14, padding: 12 },
-  hlBest: { backgroundColor: '#E1F5EE' },
-  hlHard: { backgroundColor: '#FAECE7' },
+  hlBest: { backgroundColor: '#EEEDFE' },
+  hlHard: { backgroundColor: '#E4DFFF' },
   hlTag: { fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
   hlPeriod: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
   hlReason: { fontSize: 11, lineHeight: 16 },

@@ -1,24 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useSyncMeta } from '@/db/sync';
 import { useGoals } from '@/db/goals';
 import { useSync } from '@/hooks/useSync';
 import { Goal } from '@/db/types';
 
-const STATUS_LABEL: Record<string, string> = {
-  active:   'Активна',
-  finished: 'Завершена',
-  postpone: 'Відкладена',
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  active:   '#7F77DD',
-  finished: '#4CAF88',
-  postpone: '#B4B2A9',
-};
-
 export default function ProfileScreen() {
+  const { t } = useTranslation();
   const syncMeta = useSyncMeta();
   const goalsDb = useGoals();
   const { clearLocalData } = useSync();
@@ -52,26 +42,32 @@ export default function ProfileScreen() {
         <Text style={s.name}>User {userId ?? '—'}</Text>
         <Text style={s.meta}>ID: {userId ?? '—'}</Text>
         <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-          <Text style={s.logoutText}>Вийти</Text>
+          <Text style={s.logoutText}>{t('profile.logout')}</Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={s.sectionTitle}>Мої цілі</Text>
+      <Text style={s.sectionTitle}>{t('profile.myGoals')}</Text>
 
       {goals.length === 0 ? (
-        <Text style={s.empty}>Цілей ще немає</Text>
+        <Text style={s.empty}>{t('profile.noGoals')}</Text>
       ) : (
         <>
-          {active.length > 0 && <GoalGroup label="Активні" goals={active} />}
-          {completed.length > 0 && <GoalGroup label="Завершені" goals={completed} />}
-          {archived.length > 0 && <GoalGroup label="Архів" goals={archived} />}
+          {active.length > 0    && <GoalGroup label={t('profile.groups.active')}   goals={active} t={t} />}
+          {completed.length > 0 && <GoalGroup label={t('profile.groups.finished')} goals={completed} t={t} />}
+          {archived.length > 0  && <GoalGroup label={t('profile.groups.postpone')} goals={archived} t={t} />}
         </>
       )}
     </ScrollView>
   );
 }
 
-function GoalGroup({ label, goals }: { label: string; goals: Goal[] }) {
+const STATUS_COLOR: Record<string, string> = {
+  active:   '#7F77DD',
+  finished: '#4CAF88',
+  postpone: '#B4B2A9',
+};
+
+function GoalGroup({ label, goals, t }: { label: string; goals: Goal[]; t: (k: string) => string }) {
   return (
     <View style={s.group}>
       <Text style={s.groupLabel}>{label}</Text>
@@ -82,24 +78,16 @@ function GoalGroup({ label, goals }: { label: string; goals: Goal[] }) {
             <View style={s.cardActions}>
               <View style={[s.badge, { backgroundColor: STATUS_COLOR[goal.status] + '22' }]}>
                 <Text style={[s.badgeText, { color: STATUS_COLOR[goal.status] }]}>
-                  {STATUS_LABEL[goal.status]}
+                  {t(`profile.status.${goal.status}`)}
                 </Text>
               </View>
-              <TouchableOpacity
-                onPress={() => router.push(`/goal/edit/${goal.id}`)}
-                style={s.editBtn}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity onPress={() => router.push(`/goal/edit/${goal.id}`)} style={s.editBtn} activeOpacity={0.7}>
                 <Text style={s.editIcon}>✏️</Text>
               </TouchableOpacity>
             </View>
           </View>
-          {goal.description ? (
-            <Text style={s.cardDesc} numberOfLines={2}>{goal.description}</Text>
-          ) : null}
-          {goal.deadline ? (
-            <Text style={s.cardMeta}>до {goal.deadline}</Text>
-          ) : null}
+          {goal.description ? <Text style={s.cardDesc} numberOfLines={2}>{goal.description}</Text> : null}
+          {goal.deadline ? <Text style={s.cardMeta}>до {goal.deadline}</Text> : null}
         </View>
       ))}
     </View>
@@ -109,7 +97,6 @@ function GoalGroup({ label, goals }: { label: string; goals: Goal[] }) {
 const s = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#F5F4F0' },
   content: { padding: 20, paddingBottom: 40 },
-
   header: { alignItems: 'center', marginBottom: 32 },
   gearBtn: { position: 'absolute', top: 0, right: 0, padding: 8 },
   gearIcon: { fontSize: 22 },
@@ -119,13 +106,10 @@ const s = StyleSheet.create({
   meta: { fontSize: 13, color: '#888780', marginBottom: 16 },
   logoutBtn: { backgroundColor: '#FAECE7', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 24 },
   logoutText: { color: '#993C1D', fontSize: 14, fontWeight: '600' },
-
-  sectionTitle: { fontSize: 13, fontWeight: '600', color: '#888780', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
+  sectionTitle: { fontSize: 11, fontWeight: '700', color: '#B4B2A9', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
   empty: { textAlign: 'center', color: '#B4B2A9', fontSize: 14, marginTop: 20 },
-
   group: { marginBottom: 20 },
-  groupLabel: { fontSize: 12, fontWeight: '600', color: '#B4B2A9', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
-
+  groupLabel: { fontSize: 11, fontWeight: '700', color: '#B4B2A9', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
   card: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 8 },
   cardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   cardActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },

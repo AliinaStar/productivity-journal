@@ -1,0 +1,120 @@
+{
+  "tabs": {
+    "home": "Home",
+    "notes": "Notes",
+    "summary": "Summary",
+    "profile": "Profile"
+  },
+  "home": {
+    "greetDay": "Productive day!",
+    "activeGoals": "active goals",
+    "focusLabel": "goal focus",
+    "sectionLabel": "Active goals",
+    "empty": "No active goals.\nTap + to add one.",
+    "deadline": "by {{date}}"
+  },
+  "notes": {
+    "title": "Notes",
+    "empty": "No notes yet",
+    "entries_one": "{{count}} entry",
+    "entries_other": "{{count}} entries",
+    "noEntries": "No entries for this day"
+  },
+  "summary": {
+    "title": "Reports",
+    "weeks": "Weeks",
+    "months": "Months",
+    "years": "Years",
+    "noReports": "No saved reports",
+    "activeDays_one": "{{count}} active day",
+    "activeDays_other": "{{count}} active days"
+  },
+  "login": {
+    "appName": "BCR · Journal",
+    "tagline": "Small steps\n→ big changes",
+    "cardTitle": "Sign in",
+    "emailSub": "enter your email to receive a code",
+    "emailPlaceholder": "email@example.com",
+    "sendCode": "Send code →",
+    "noAccount": "No account? It's created automatically",
+    "codeSub": "enter the 6-digit code sent to {{email}}",
+    "codePlaceholder": "000000",
+    "signIn": "Sign in",
+    "changeEmail": "← change email",
+    "errorSend": "Failed to send code. Check your email or connection.",
+    "errorCode": "Invalid or expired code."
+  },
+  "profile": {
+    "myGoals": "My goals",
+    "noGoals": "No goals yet",
+    "logout": "Log out",
+    "groups": {
+      "active": "Active",
+      "finished": "Completed",
+      "postpone": "Archive"
+    },
+    "status": {
+      "active": "Active",
+      "finished": "Completed",
+      "postpone": "Postponed"
+    }
+  },
+  "onboarding": {
+    "title": "Tell us about yourself",
+    "sub": "This helps us personalise your reports",
+    "nameLabel": "What's your name?",
+    "namePlaceholder": "Name",
+    "languageLabel": "Report language",
+    "genderLabel": "Gender",
+    "continue": "Continue",
+    "errorName": "Please enter your name",
+    "errorSave": "Failed to save. Please try again.",
+    "genders": {
+      "female": "Female",
+      "male": "Male",
+      "unspecified": "Prefer not to say"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "nameLabel": "Name",
+    "namePlaceholder": "Name",
+    "languageLabel": "Report language",
+    "genderLabel": "Gender",
+    "save": "Save",
+    "cancel": "Cancel",
+    "errorLoad": "Failed to load profile",
+    "errorName": "Please enter your name",
+    "errorSave": "Failed to save. Please try again."
+  },
+  "goal": {
+    "titleLabel": "Goal title",
+    "titlePlaceholder": "E.g. Run a marathon",
+    "descLabel": "Description",
+    "descPlaceholder": "Additional context...",
+    "deadlineLabel": "Deadline",
+    "pickDate": "Pick a date",
+    "statusLabel": "Status",
+    "save": "Save",
+    "errorTitle": "Please enter a goal title",
+    "errorSave": "Failed to save",
+    "statuses": {
+      "active": "Active",
+      "postpone": "Postponed",
+      "finished": "Completed"
+    }
+  },
+  "entry": {
+    "noteLabel": "What did you do today?",
+    "notePlaceholder": "Write here...",
+    "scoreLabel": "Progress feeling",
+    "save": "Save",
+    "errorEmpty": "Please write a note",
+    "errorSave": "Failed to save"
+  },
+  "nav": {
+    "newGoal": "New goal",
+    "addNote": "Add note",
+    "notesList": "Notes"
+  }
+}

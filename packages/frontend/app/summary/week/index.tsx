@@ -1,15 +1,17 @@
 import { useCallback, useState } from 'react';
 import { Text, TouchableOpacity, ScrollView, StyleSheet, View, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useReports } from '@/db/reports';
 import { useSync } from '@/hooks/useSync';
 import { ReportCache } from '@/db/types';
 import { toPeriodKey, periodLabel } from '@/utils/period';
 
 export default function WeekList() {
+  const { t } = useTranslation();
   const router = useRouter();
   const reports = useReports();
-  const { pullReport, syncReports } = useSync();
+  const { syncReports } = useSync();
   const [items, setItems] = useState<ReportCache[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,19 +25,13 @@ export default function WeekList() {
     load();
   }, []));
 
-  async function handlePull(item: ReportCache) {
-    await pullReport('week', toPeriodKey('week', item.period_start), item.period_start, item.period_end);
-    const data = await reports.getAll('week');
-    setItems(data);
-  }
-
   return (
     <ScrollView style={s.scroll} contentContainerStyle={s.content}>
-      <Text style={s.header}>Weekly reports</Text>
+      <Text style={s.header}>{t('summary.weeks')}</Text>
       {loading ? (
         <ActivityIndicator color="#7F77DD" />
       ) : items.length === 0 ? (
-        <Text style={s.empty}>Немає збережених звітів</Text>
+        <Text style={s.empty}>{t('summary.noReports')}</Text>
       ) : (
         items.map(item => {
           const key = toPeriodKey('week', item.period_start);
@@ -53,7 +49,7 @@ export default function WeekList() {
                   <Text style={s.cardScore}>{item.avg_productivity.toFixed(1)} avg</Text>
                 )}
               </View>
-              <Text style={s.cardMeta}>{item.active_days} активних днів</Text>
+              <Text style={s.cardMeta}>{t('summary.activeDays', { count: item.active_days })}</Text>
             </TouchableOpacity>
           );
         })
@@ -65,7 +61,7 @@ export default function WeekList() {
 const s = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#F5F4F0' },
   content: { padding: 16, gap: 10, paddingBottom: 32 },
-  header: { fontSize: 13, fontWeight: '600', color: '#888780', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  header: { fontSize: 22, fontWeight: '700', color: '#26215C', marginBottom: 8 },
   card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 14 },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   cardLabel: { fontSize: 15, fontWeight: '600', color: '#2C2C2A' },

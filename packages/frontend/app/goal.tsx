@@ -2,16 +2,13 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { useGoals } from '@/db/goals';
 import { GoalStatus } from '@/db/types';
 
-const STATUS_OPTIONS: { label: string; value: GoalStatus }[] = [
-  { label: 'Активна', value: 'active' },
-  { label: 'Відкладена', value: 'postpone' },
-  { label: 'Завершена', value: 'finished' },
-];
-
 export default function GoalAdder() {
+  const { t } = useTranslation();
   const goals = useGoals();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -21,13 +18,15 @@ export default function GoalAdder() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const STATUS_KEYS: GoalStatus[] = ['active', 'postpone', 'finished'];
+
   function onDateChange(_: DateTimePickerEvent, selected?: Date) {
     setShowPicker(false);
     if (selected) setDeadline(selected);
   }
 
   async function handleSave() {
-    if (!title.trim()) { setError('Введи назву цілі'); return; }
+    if (!title.trim()) { setError(t('goal.errorTitle')); return; }
     setSaving(true);
     setError(null);
     try {
@@ -39,40 +38,38 @@ export default function GoalAdder() {
       });
       router.back();
     } catch {
-      setError('Помилка збереження');
+      setError(t('goal.errorSave'));
     } finally {
       setSaving(false);
     }
   }
 
+  const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-US';
+
   return (
     <View style={s.container}>
-      <Text style={s.label}>Назва цілі</Text>
-      <TextInput style={s.input} placeholder="Напр. Бігти марафон" value={title} onChangeText={setTitle} />
+      <Text style={s.label}>{t('goal.titleLabel')}</Text>
+      <TextInput style={s.input} placeholder={t('goal.titlePlaceholder')} value={title} onChangeText={setTitle} />
 
-      <Text style={s.label}>Опис</Text>
-      <TextInput style={[s.input, s.multiline]} placeholder="Додатковий контекст..." value={description} onChangeText={setDescription} multiline />
+      <Text style={s.label}>{t('goal.descLabel')}</Text>
+      <TextInput style={[s.input, s.multiline]} placeholder={t('goal.descPlaceholder')} value={description} onChangeText={setDescription} multiline />
 
-      <Text style={s.label}>Дедлайн</Text>
+      <Text style={s.label}>{t('goal.deadlineLabel')}</Text>
       <TouchableOpacity style={s.dateBtn} onPress={() => setShowPicker(true)}>
         <Text style={s.dateBtnText}>
-          {deadline ? deadline.toLocaleDateString('uk-UA') : 'Вибрати дату'}
+          {deadline ? deadline.toLocaleDateString(locale) : t('goal.pickDate')}
         </Text>
       </TouchableOpacity>
       {showPicker && (
         <DateTimePicker value={deadline ?? new Date()} mode="date" display="default" onChange={onDateChange} />
       )}
 
-      <Text style={s.label}>Статус</Text>
+      <Text style={s.label}>{t('goal.statusLabel')}</Text>
       <View style={s.statusRow}>
-        {STATUS_OPTIONS.map(opt => (
-          <TouchableOpacity
-            key={opt.value}
-            style={[s.statusChip, status === opt.value && s.statusChipActive]}
-            onPress={() => setStatus(opt.value)}
-          >
-            <Text style={[s.statusChipText, status === opt.value && s.statusChipTextActive]}>
-              {opt.label}
+        {STATUS_KEYS.map(key => (
+          <TouchableOpacity key={key} style={[s.statusChip, status === key && s.statusChipActive]} onPress={() => setStatus(key)}>
+            <Text style={[s.statusChipText, status === key && s.statusChipTextActive]}>
+              {t(`goal.statuses.${key}`)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -81,7 +78,7 @@ export default function GoalAdder() {
       {error && <Text style={s.error}>{error}</Text>}
 
       <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving} activeOpacity={0.8}>
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Зберегти</Text>}
+        {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>{t('goal.save')}</Text>}
       </TouchableOpacity>
     </View>
   );

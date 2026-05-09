@@ -1,0 +1,124 @@
+{
+  "tabs": {
+    "home": "Головна",
+    "notes": "Нотатки",
+    "summary": "Підсумки",
+    "profile": "Профіль"
+  },
+  "home": {
+    "greetDay": "Продуктивного дня!",
+    "activeGoals": "активних цілей",
+    "focusLabel": "фокус на цілях",
+    "sectionLabel": "Активні цілі",
+    "empty": "Немає активних цілей.\nНатисни + щоб додати.",
+    "deadline": "до {{date}}"
+  },
+  "notes": {
+    "title": "Нотатки",
+    "empty": "Нотаток ще немає",
+    "entries_one": "{{count}} запис",
+    "entries_few": "{{count}} записи",
+    "entries_many": "{{count}} записів",
+    "entries_other": "{{count}} записів",
+    "noEntries": "Немає записів за цей день"
+  },
+  "summary": {
+    "title": "Підсумки",
+    "weeks": "Тижні",
+    "months": "Місяці",
+    "years": "Роки",
+    "noReports": "Немає збережених звітів",
+    "activeDays_one": "{{count}} активний день",
+    "activeDays_few": "{{count}} активних дні",
+    "activeDays_many": "{{count}} активних днів",
+    "activeDays_other": "{{count}} активних днів"
+  },
+  "login": {
+    "appName": "BCR · Journal",
+    "tagline": "Маленькі кроки\n→ великі зміни",
+    "cardTitle": "Вхід",
+    "emailSub": "введи email щоб отримати код",
+    "emailPlaceholder": "email@example.com",
+    "sendCode": "Надіслати код →",
+    "noAccount": "Немає акаунту? Він створюється автоматично",
+    "codeSub": "введи 6-значний код з листа на {{email}}",
+    "codePlaceholder": "000000",
+    "signIn": "Увійти",
+    "changeEmail": "← змінити email",
+    "errorSend": "Не вдалося надіслати код. Перевір email або з'єднання.",
+    "errorCode": "Невірний або прострочений код."
+  },
+  "profile": {
+    "myGoals": "Мої цілі",
+    "noGoals": "Цілей ще немає",
+    "logout": "Вийти",
+    "groups": {
+      "active": "Активні",
+      "finished": "Завершені",
+      "postpone": "Архів"
+    },
+    "status": {
+      "active": "Активна",
+      "finished": "Завершена",
+      "postpone": "Відкладена"
+    }
+  },
+  "onboarding": {
+    "title": "Розкажи про себе",
+    "sub": "Це допоможе нам персоналізувати звіти",
+    "nameLabel": "Як тебе звати?",
+    "namePlaceholder": "Ім'я",
+    "languageLabel": "Мова звітів",
+    "genderLabel": "Стать",
+    "continue": "Продовжити",
+    "errorName": "Введи своє ім'я",
+    "errorSave": "Не вдалося зберегти. Спробуй ще раз.",
+    "genders": {
+      "female": "Жінка",
+      "male": "Чоловік",
+      "unspecified": "Не вказувати"
+    }
+  },
+  "settings": {
+    "title": "Налаштування",
+    "nameLabel": "Ім'я",
+    "namePlaceholder": "Ім'я",
+    "languageLabel": "Мова звітів",
+    "genderLabel": "Стать",
+    "save": "Зберегти",
+    "cancel": "Скасувати",
+    "errorLoad": "Не вдалося завантажити профіль",
+    "errorName": "Введи ім'я",
+    "errorSave": "Не вдалося зберегти. Спробуй ще раз."
+  },
+  "goal": {
+    "titleLabel": "Назва цілі",
+    "titlePlaceholder": "Напр. Бігти марафон",
+    "descLabel": "Опис",
+    "descPlaceholder": "Додатковий контекст...",
+    "deadlineLabel": "Дедлайн",
+    "pickDate": "Вибрати дату",
+    "statusLabel": "Статус",
+    "save": "Зберегти",
+    "errorTitle": "Введи назву цілі",
+    "errorSave": "Помилка збереження",
+    "statuses": {
+      "active": "Активна",
+      "postpone": "Відкладена",
+      "finished": "Завершена"
+    }
+  },
+  "entry": {
+    "noteLabel": "Що ти зробила сьогодні?",
+    "notePlaceholder": "Напиши тут...",
+    "scoreLabel": "Відчуття прогресу",
+    "save": "Зберегти",
+    "errorEmpty": "Напиши нотатку",
+    "errorSave": "Помилка збереження"
+  },
+  "nav": {
+    "newGoal": "Нова ціль",
+    "addNote": "Додати нотатку",
+    "notesList": "Нотатки"
+  }
+}

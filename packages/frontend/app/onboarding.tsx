@@ -1,19 +1,17 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import { router } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useSyncMeta } from '@/db/sync';
 import { useSync } from '@/hooks/useSync';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const LANGUAGES = ['English', 'Ukrainian', 'Polish', 'German', 'French', 'Spanish'];
-const GENDERS: { value: string; label: string }[] = [
-  { value: 'female',      label: 'Жінка' },
-  { value: 'male',        label: 'Чоловік' },
-  { value: 'unspecified', label: 'Не вказувати' },
-];
+const GENDER_KEYS = ['female', 'male', 'unspecified'] as const;
 
 export default function OnboardingScreen() {
+  const { t } = useTranslation();
   const syncMeta = useSyncMeta();
   const { pullGoals, pullEntries } = useSync();
   const [name, setName] = useState('');
@@ -23,10 +21,7 @@ export default function OnboardingScreen() {
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
-    if (!name.trim()) {
-      setError("Введи своє ім'я");
-      return;
-    }
+    if (!name.trim()) { setError(t('onboarding.errorName')); return; }
     setLoading(true);
     setError(null);
     try {
@@ -40,7 +35,7 @@ export default function OnboardingScreen() {
       try { await pullGoals(); await pullEntries(); } catch {}
       router.replace('/(tabs)');
     } catch {
-      setError('Не вдалося зберегти. Спробуй ще раз.');
+      setError(t('onboarding.errorSave'));
     } finally {
       setLoading(false);
     }
@@ -48,43 +43,33 @@ export default function OnboardingScreen() {
 
   return (
     <ScrollView style={s.scroll} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-      <Text style={s.title}>Розкажи про себе</Text>
-      <Text style={s.sub}>Це допоможе нам персоналізувати звіти</Text>
+      <Text style={s.title}>{t('onboarding.title')}</Text>
+      <Text style={s.sub}>{t('onboarding.sub')}</Text>
 
-      <Text style={s.label}>Як тебе звати?</Text>
+      <Text style={s.label}>{t('onboarding.nameLabel')}</Text>
       <TextInput
         style={s.input}
-        placeholder="Ім'я"
+        placeholder={t('onboarding.namePlaceholder')}
         placeholderTextColor="#B4B2A9"
         value={name}
         onChangeText={setName}
         autoCapitalize="words"
       />
 
-      <Text style={s.label}>Мова звітів</Text>
+      <Text style={s.label}>{t('onboarding.languageLabel')}</Text>
       <View style={s.chips}>
         {LANGUAGES.map(lang => (
-          <TouchableOpacity
-            key={lang}
-            style={[s.chip, language === lang && s.chipSelected]}
-            onPress={() => setLanguage(lang)}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity key={lang} style={[s.chip, language === lang && s.chipSelected]} onPress={() => setLanguage(lang)} activeOpacity={0.7}>
             <Text style={[s.chipText, language === lang && s.chipTextSelected]}>{lang}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      <Text style={s.label}>Стать</Text>
+      <Text style={s.label}>{t('onboarding.genderLabel')}</Text>
       <View style={s.chips}>
-        {GENDERS.map(g => (
-          <TouchableOpacity
-            key={g.value}
-            style={[s.chip, gender === g.value && s.chipSelected]}
-            onPress={() => setGender(g.value)}
-            activeOpacity={0.7}
-          >
-            <Text style={[s.chipText, gender === g.value && s.chipTextSelected]}>{g.label}</Text>
+        {GENDER_KEYS.map(key => (
+          <TouchableOpacity key={key} style={[s.chip, gender === key && s.chipSelected]} onPress={() => setGender(key)} activeOpacity={0.7}>
+            <Text style={[s.chipText, gender === key && s.chipTextSelected]}>{t(`onboarding.genders.${key}`)}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -92,7 +77,7 @@ export default function OnboardingScreen() {
       {error && <Text style={s.error}>{error}</Text>}
 
       <TouchableOpacity style={s.btn} onPress={handleSave} disabled={loading} activeOpacity={0.8}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Продовжити</Text>}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>{t('onboarding.continue')}</Text>}
       </TouchableOpacity>
     </ScrollView>
   );
@@ -103,16 +88,13 @@ const s = StyleSheet.create({
   content: { padding: 28, paddingTop: 64 },
   title: { fontSize: 26, fontWeight: '700', color: '#26215C', marginBottom: 6 },
   sub: { fontSize: 14, color: '#888780', marginBottom: 36 },
-
   label: { fontSize: 13, fontWeight: '600', color: '#888780', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
   input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, fontSize: 15, marginBottom: 28, color: '#2C2C2A' },
-
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 28 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#E5E4DF' },
   chipSelected: { backgroundColor: '#7F77DD', borderColor: '#7F77DD' },
   chipText: { fontSize: 13, color: '#5F5E5A', fontWeight: '500' },
   chipTextSelected: { color: '#fff' },
-
   error: { fontSize: 13, color: '#993C1D', marginBottom: 12 },
   btn: { backgroundColor: '#7F77DD', borderRadius: 12, padding: 15, alignItems: 'center', marginTop: 8 },
   btnText: { color: '#fff', fontSize: 15, fontWeight: '600' },

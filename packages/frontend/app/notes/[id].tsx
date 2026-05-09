@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { useEntries } from '@/db/entries';
 import { useGoals } from '@/db/goals';
 import { Entry, Goal } from '@/db/types';
 
 export default function NoteDetail() {
+  const { t } = useTranslation();
   const { id: date } = useLocalSearchParams<{ id: string }>();
   const entries = useEntries();
   const goals = useGoals();
@@ -26,13 +29,14 @@ export default function NoteDetail() {
     load();
   }, [date]);
 
-  const formatted = new Date(date).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
+  const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-US';
+  const formatted = new Date(date).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
     <ScrollView style={s.scroll} contentContainerStyle={s.content}>
       <Text style={s.dateTitle}>{formatted}</Text>
       {items.length === 0 ? (
-        <Text style={s.empty}>Немає записів за цей день</Text>
+        <Text style={s.empty}>{t('notes.noEntries')}</Text>
       ) : (
         items.map(item => (
           <View key={item.id} style={s.card}>

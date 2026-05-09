@@ -1,11 +1,21 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+
 import { View, Text, StyleSheet, Pressable, FlatList, ActivityIndicator } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { useGoals } from '@/db/goals';
 import { useSync } from '@/hooks/useSync';
 import { Goal } from '@/db/types';
 
+function todayLabel() {
+  const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-US';
+  return new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
 export default function HomeScreen() {
+  const { t } = useTranslation();
   const goals = useGoals();
   const { sync, syncing } = useSync();
   const [items, setItems] = useState<Goal[]>([]);
@@ -26,12 +36,27 @@ export default function HomeScreen() {
 
   return (
     <View style={s.container}>
-      <View style={s.header}>
-        <Text style={s.quote}>Маленькі кроки щодня → великі зміни</Text>
-        <Pressable onPress={handleSync} disabled={syncing} style={s.syncBtn}>
-          <Text style={s.syncText}>{syncing ? 'Синхронізація...' : 'Синк'}</Text>
-        </Pressable>
-      </View>
+      <LinearGradient colors={['#534AB7', '#7F77DD']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.header}>
+        <View style={s.headerTop}>
+          <View>
+            <Text style={s.greeting}>{todayLabel()}</Text>
+            <Text style={s.headerTitle}>{t('home.greetDay')}</Text>
+          </View>
+          <Pressable onPress={handleSync} disabled={syncing} style={s.syncBtn}>
+            <Text style={s.syncText}>{syncing ? '…' : '↻'}</Text>
+          </Pressable>
+        </View>
+        <View style={s.statsRow}>
+          <View style={s.statCard}>
+            <Text style={s.statValue}>{loading ? '—' : items.length}</Text>
+            <Text style={s.statLabel}>{t('home.activeGoals')}</Text>
+          </View>
+          <View style={s.statCard}>
+            <Text style={s.statValue}>🎯</Text>
+            <Text style={s.statLabel}>{t('home.focusLabel')}</Text>
+          </View>
+        </View>
+      </LinearGradient>
 
       {loading ? (
         <ActivityIndicator style={s.loader} color="#7F77DD" />
@@ -40,14 +65,20 @@ export default function HomeScreen() {
           data={items}
           keyExtractor={item => item.id}
           contentContainerStyle={s.list}
+          ListHeaderComponent={<Text style={s.sectionLabel}>{t('home.sectionLabel')}</Text>}
           renderItem={({ item }) => (
             <Pressable style={s.goalCard} onPress={() => router.push(`/goal/${item.id}`)}>
               <Text style={s.goalTitle}>{item.title}</Text>
               {item.description ? <Text style={s.goalDesc}>{item.description}</Text> : null}
+              {item.deadline ? (
+                <View style={s.deadlineBadge}>
+                  <Text style={s.deadlineText}>{t('home.deadline', { date: item.deadline })}</Text>
+                </View>
+              ) : null}
             </Pressable>
           )}
           ListEmptyComponent={
-            <Text style={s.empty}>Немає активних цілей.{'\n'}Натисни + щоб додати.</Text>
+            <Text style={s.empty}>{t('home.empty')}</Text>
           }
         />
       )}
@@ -61,16 +92,25 @@ export default function HomeScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F4F0' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingBottom: 8 },
-  quote: { fontSize: 15, fontWeight: '600', color: '#26215C', flex: 1 },
-  syncBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#EEEDFE', borderRadius: 8 },
-  syncText: { fontSize: 12, color: '#534AB7', fontWeight: '500' },
+  header: { paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  greeting: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginBottom: 2, textTransform: 'capitalize' },
+  headerTitle: { fontSize: 22, fontWeight: '700', color: '#fff' },
+  syncBtn: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  syncText: { fontSize: 18, color: '#fff', fontWeight: '600' },
+  statsRow: { flexDirection: 'row', gap: 10 },
+  statCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: 12 },
+  statValue: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 2 },
+  statLabel: { fontSize: 10, color: 'rgba(255,255,255,0.7)' },
   loader: { flex: 1 },
+  sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: '#B4B2A9', marginBottom: 8 },
   list: { padding: 16, gap: 10, paddingBottom: 80 },
-  goalCard: { backgroundColor: '#fff', borderRadius: 14, padding: 16 },
+  goalCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16 },
   goalTitle: { fontSize: 15, fontWeight: '600', color: '#2C2C2A' },
   goalDesc: { fontSize: 13, color: '#888780', marginTop: 4 },
+  deadlineBadge: { marginTop: 10, alignSelf: 'flex-start', backgroundColor: '#FFF4E6', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  deadlineText: { fontSize: 11, color: '#E8962A', fontWeight: '600' },
   empty: { textAlign: 'center', marginTop: 60, fontSize: 14, color: '#B4B2A9', lineHeight: 22 },
-  fab: { position: 'absolute', right: 20, bottom: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#7F77DD', alignItems: 'center', justifyContent: 'center' },
+  fab: { position: 'absolute', right: 20, bottom: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#7F77DD', alignItems: 'center', justifyContent: 'center', shadowColor: '#7F77DD', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
   fabText: { color: '#fff', fontSize: 28, lineHeight: 30 },
 });

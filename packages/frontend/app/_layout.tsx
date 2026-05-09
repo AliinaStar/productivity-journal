@@ -4,6 +4,8 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { useEffect } from 'react';
 import { migrateDb } from '@/db/schema';
 import { useSyncMeta } from '@/db/sync';
+import { useTranslation } from 'react-i18next';
+import '@/i18n';
 
 function AuthGuard() {
   const syncMeta = useSyncMeta();
@@ -16,6 +18,7 @@ function AuthGuard() {
 }
 
 export default function RootLayout() {
+  const { t } = useTranslation();
   return (
     <SQLiteProvider databaseName="bcr.db" onInit={migrateDb}>
       <StatusBar style="auto" />
@@ -23,9 +26,10 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="goal" options={{ title: 'Нова ціль' }} />
-        <Stack.Screen name="goal/[id]" options={{ title: 'Додати нотатку' }} />
-        <Stack.Screen name="notes/[id]" options={{ title: 'Нотатки' }} />
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+        <Stack.Screen name="goal" options={{ title: t('nav.newGoal') }} />
+        <Stack.Screen name="goal/[id]" options={{ title: t('nav.addNote') }} />
+        <Stack.Screen name="notes/[id]" options={{ title: t('nav.notesList') }} />
       </Stack>
     </SQLiteProvider>
   );
