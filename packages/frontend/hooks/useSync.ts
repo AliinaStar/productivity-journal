@@ -87,6 +87,7 @@ export function useSync() {
     periodStart: string,
     periodEnd: string,
   ): Promise<void> {
+    await pushChanges();
     const userId = await requireUserId();
     const remote = await ReportsApi.requestReport(period, periodStart, periodEnd, userId);
 

@@ -1,152 +1,97 @@
-# productivity-journal
+# BCR — Productivity Journal
 
 Personal productivity tracking app with AI-generated weekly, monthly, and yearly reports.
 
-Users log daily notes and productivity scores per goal. The backend runs a RAG pipeline (LangGraph + OpenAI) to generate structured reports, using MMR retrieval for historical context and APScheduler for automatic generation.
+Users log daily notes and productivity scores per goal. The backend generates structured analytical reports using a RAG pipeline (LangGraph + OpenAI GPT), with MMR-based semantic retrieval for historical context.
 
-## Structure
+## Architecture
 
 ```
 bcr-app/
 ├── packages/
-│   ├── backend/   # FastAPI + LangGraph + PostgreSQL
-│   └── frontend/  # React Native (Expo) mobile app
+│   ├── backend/    # FastAPI · PostgreSQL + pgvector · LangGraph · Docker
+│   └── frontend/   # React Native (Expo) · SQLite · local-first sync
 ```
 
-## Backend
+The frontend stores all data locally in SQLite and syncs to the backend on demand. Authentication is passwordless — the user enters their email and receives a 6-digit OTP.
 
-### Stack
+## Quick start (development)
 
-- **FastAPI** — REST API
-- **PostgreSQL + pgvector** — storage and vector search
-- **SQLAlchemy (async) + Alembic** — ORM and migrations
-- **LangGraph** — 5-node RAG pipeline
-- **OpenAI GPT-4o** — report generation
-- **`Alibaba-NLP/gte-multilingual-base`** — embeddings (768-dim)
-- **APScheduler** — automatic report generation (cron)
-- **Langfuse** — observability
-- **Resend** — passwordless email auth (OTP)
-
-### Setup
+### 1. Backend (Docker)
 
 ```bash
 cd packages/backend
+cp .env.example .env
+# Fill in OPENAI_API_KEY, RESEND_API_KEY and EMAIL_FROM in .env
+# Set APP_ENV=development to skip OTP during development
 
-# Create and activate virtual environment
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-# source .venv/bin/activate     # Linux / macOS
-
-# Install dependencies
-pip install -e .
+docker compose up --build
 ```
 
-Create a `.env` file in `packages/backend/`:
+API is available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
-```env
-# Database
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5433
-POSTGRES_DB=reporting_system
-
-# OpenAI
-OPENAI_API_KEY=sk-...
-LLM_MODEL=gpt-4o
-
-# Email (Resend)
-RESEND_API_KEY=re_...
-EMAIL_FROM=noreply@yourdomain.com
-
-# Langfuse (optional)
-LANGFUSE_PUBLIC_KEY=
-LANGFUSE_SECRET_KEY=
-LANGFUSE_BASE_URL=
-
-# App
-CORS_ORIGINS=["http://localhost:8081"]
-```
-
-### Database
-
-```bash
-# Apply all migrations
-alembic upgrade head
-```
-
-Requires PostgreSQL with the `pgvector` extension enabled:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-```
-
-### Run
-
-```bash
-uvicorn src.main:app --reload
-```
-
-API docs available at `http://localhost:8000/docs`.
-
-### API overview
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/auth/send-code` | Send OTP to email |
-| POST | `/auth/verify-code` | Verify OTP, returns `user_id` |
-| POST | `/goals` | Create goal |
-| PATCH | `/goals/{id}` | Update goal |
-| POST | `/entries` | Create entry (auto-embeds note) |
-| PATCH | `/entries/{id}` | Update entry (re-embeds if note changed) |
-| POST | `/reports/generate` | Run RAG pipeline, save and return report |
-| GET | `/reports` | Fetch stored report by period |
-
-All endpoints except `/auth/*` require the `X-User-ID` header (integer user ID returned by `/auth/verify-code`).
-
-### RAG Pipeline
-
-```
-START
-  ├── week  ──────────────────────────► retrieve_entries
-  │                                           │
-  └── month / year ──► collect_reports   create_report ──► END
-                              │                ▲
-                       generate_summary        │
-                              │                │
-                       retrieve_similar ───────┘
-```
-
-- **Week path**: loads current-week entries directly into `create_report`
-- **Month / Year path**: fetches sub-period reports from DB → compresses per-goal summaries via LLM → retrieves historical context via MMR → generates report
-- **MMR retrieval**: λ = 0.5, balances relevance and diversity across historical entries
-
-### Automatic report generation
-
-APScheduler runs three cron jobs (UTC):
-
-| Period | Schedule |
-|--------|----------|
-| Week | Monday 00:01 |
-| Month | 1st of month 00:01 |
-| Year | 1 Jan 00:01 |
-
-Up to 10 pipeline runs execute concurrently; remaining tasks wait in a semaphore queue.
-
-## Frontend
-
-React Native app built with Expo. Stores data locally in SQLite and syncs to the backend on demand.
+### 2. Frontend (Expo)
 
 ```bash
 cd packages/frontend
 npm install
+cp .env.example .env
+# EXPO_PUBLIC_API_URL is auto-detected from Expo's Metro host in __DEV__ mode
+# so you usually don't need to edit it
+
 npx expo start
 ```
 
-Set `EXPO_PUBLIC_API_URL` in `packages/frontend/.env`:
+Scan the QR code with Expo Go (Android / iOS) or press `a` / `i` for emulators.
 
-```env
-EXPO_PUBLIC_API_URL=http://localhost:8000
+> **Note:** in `development` mode the backend exposes `POST /auth/dev-login` which skips OTP — just enter any email and you're in.
+
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| Mobile | React Native + Expo Router |
+| Local DB | SQLite via `expo-sqlite` |
+| Backend API | FastAPI (Python 3.11) |
+| Database | PostgreSQL 17 + pgvector |
+| ORM | SQLAlchemy (async) + Alembic |
+| RAG pipeline | LangGraph |
+| LLM | OpenAI GPT-4o |
+| Embeddings | `Alibaba-NLP/gte-multilingual-base` (768-dim) |
+| Scheduler | APScheduler (cron) |
+| Email | Resend (OTP auth) |
+| Observability | Langfuse |
+| Containerisation | Docker Compose |
+
+## Repository structure
+
+```
+packages/
+├── backend/
+│   ├── src/
+│   │   ├── api/          # FastAPI app factory, lifespan
+│   │   ├── core/         # settings, auth dependency, email
+│   │   ├── db/           # SQLAlchemy models, session, migrations
+│   │   ├── rag/          # embeddings, retrieval, LangGraph pipeline,
+│   │   │                 # scheduler, prompts, schemas
+│   │   └── routes/       # auth, goals, entries, reports, users, health
+│   ├── alembic/          # DB migrations
+│   ├── notebooks/        # RAG experiments and evaluation
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   └── pyproject.toml
+└── frontend/
+    ├── app/              # Expo Router screens (login, onboarding,
+    │                     # goals, notes, summary/week|month|year)
+    ├── api-client/       # typed fetch wrappers for each resource
+    ├── db/               # SQLite schema + query hooks
+    ├── hooks/            # useSync — push/pull logic
+    ├── components/       # shared UI components
+    ├── i18n/             # English / Ukrainian translations
+    └── utils/
 ```
 
-After login, the `user_id` returned by `/auth/verify-code` is stored in local `sync_meta` and sent as `X-User-ID` header on every subsequent request.
+## See also
+
+- [Backend README](packages/backend/README.md) — full API reference, RAG pipeline, scheduler
+- [Frontend README](packages/frontend/README.md) — screens, sync model, environment config

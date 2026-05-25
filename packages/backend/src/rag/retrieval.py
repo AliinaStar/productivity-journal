@@ -22,7 +22,7 @@ from sqlalchemy import select
 
 from src.db.models import Entry, Goal
 from src.db.session import get_async_sessionmaker
-from src.rag.embeddings import get_embedding_model
+from src.rag.embeddings import embed_text
 
 
 async def retrieve_similar_mmr(
@@ -46,8 +46,7 @@ async def retrieve_similar_mmr(
         ORM ``Entry`` objects ordered by MMR selection (most relevant/diverse first).
         Returns an empty list when no embedded entries exist before *before_date*.
     """
-    model = get_embedding_model()
-    query_emb = model.encode(query_text, normalize_embeddings=True)
+    query_emb = await embed_text(query_text)
 
     session_factory = get_async_sessionmaker()
     async with session_factory() as session:

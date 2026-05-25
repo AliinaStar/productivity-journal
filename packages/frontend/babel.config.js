@@ -5,8 +5,7 @@ module.exports = function (api) {
       ['babel-preset-expo', { jsxRuntime: 'automatic' }]
     ],
     plugins: [
-      // Закоментовано поки що
-      // 'react-native-reanimated/plugin',
+      'react-native-reanimated/plugin',
     ],
   };
 };

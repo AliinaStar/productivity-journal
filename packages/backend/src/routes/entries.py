@@ -6,8 +6,6 @@ Entries are scoped to goals that belong to the current user.
 
 from datetime import date
 
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -15,7 +13,7 @@ from sqlalchemy import select
 from src.core.dependencies import get_current_user
 from src.db.models import Entry, Goal, User
 from src.db.session import get_async_sessionmaker
-from src.rag.embeddings import get_embedding_model
+from src.rag.embeddings import embed_text
 
 router = APIRouter(prefix="/entries", tags=["entries"])
 
@@ -54,12 +52,7 @@ def _to_response(entry: Entry) -> EntryResponse:
 
 
 async def _embed(text: str) -> list[float]:
-    model = get_embedding_model()
-    loop = asyncio.get_event_loop()
-    vector = await loop.run_in_executor(
-        None, lambda: model.encode(text, normalize_embeddings=True)
-    )
-    return vector.tolist()
+    return await embed_text(text)
 
 
 @router.get("", response_model=list[EntryResponse])

@@ -16,6 +16,4 @@ config.resolver.nodeModulesPaths = [
 
 config.resolver.platforms = ['ios', 'android', 'web'];
 
-config.resolver.unstable_enablePackageExports = true;
-
 module.exports = config;

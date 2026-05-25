@@ -1,6 +1,5 @@
 import { PeriodType } from '@/db/types';
-
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+import { BASE_URL } from './config';
 
 export interface RemoteReport {
   id: number;

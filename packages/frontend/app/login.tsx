@@ -5,8 +5,8 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSyncMeta } from '@/db/sync';
 import { useSync } from '@/hooks/useSync';
+import { BASE_URL } from '@/api-client/config';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 const IS_DEV = process.env.EXPO_PUBLIC_APP_ENV === 'development';
 
 export default function LoginScreen() {

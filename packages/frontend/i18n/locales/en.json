@@ -26,6 +26,9 @@
     "months": "Months",
     "years": "Years",
     "noReports": "No saved reports",
+    "generate": "Generate report",
+    "generating": "Generating...",
+    "generateError": "Failed to generate report",
     "activeDays_one": "{{count}} active day",
     "activeDays_other": "{{count}} active days"
   },

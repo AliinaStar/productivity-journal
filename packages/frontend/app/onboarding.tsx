@@ -4,8 +4,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useSyncMeta } from '@/db/sync';
 import { useSync } from '@/hooks/useSync';
-
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+import { BASE_URL } from '@/api-client/config';
 
 const LANGUAGES = ['English', 'Ukrainian', 'Polish', 'German', 'French', 'Spanish'];
 const GENDER_KEYS = ['female', 'male', 'unspecified'] as const;

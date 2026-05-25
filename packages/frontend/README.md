@@ -1,50 +1,143 @@
-# Welcome to your Expo app 👋
+# Frontend — BCR Productivity Journal
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+React Native (Expo) mobile app for logging daily productivity notes and viewing AI-generated reports.
 
-## Get started
+## Stack
 
-1. Install dependencies
+| Component | Technology |
+|-----------|-----------|
+| Framework | React Native + Expo SDK |
+| Navigation | Expo Router (file-based) |
+| Local storage | SQLite via `expo-sqlite` |
+| Internationalisation | `i18n-js` (English / Ukrainian) |
+| API communication | Custom typed fetch wrappers (`api-client/`) |
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Running
 
 ```bash
-npm run reset-project
+npm install
+
+# Copy environment template
+cp .env.example .env
+# In __DEV__ mode the backend URL is auto-detected from Expo Metro's host,
+# so EXPO_PUBLIC_API_URL is only needed for production builds.
+
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+- Press `a` to open on Android emulator
+- Press `i` to open on iOS simulator
+- Scan the QR code with Expo Go on a physical device
 
-## Learn more
+> The device and the backend must be on the same local network. In `__DEV__` mode the app automatically uses the IP address where Metro is running — no manual URL configuration needed.
 
-To learn more about developing your project with Expo, look at the following resources:
+## Environment variables
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Create `packages/frontend/.env`:
 
-## Join the community
+```env
+# Used in production builds only (auto-detected from Metro in dev mode)
+EXPO_PUBLIC_API_URL=http://<your-backend-ip>:8000
 
-Join our community of developers creating universal apps.
+# Set to 'development' to use /auth/dev-login (skips OTP)
+EXPO_PUBLIC_APP_ENV=development
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+`EXPO_PUBLIC_*` variables are baked into the JS bundle at build time, not at runtime.
+
+## Authentication
+
+Passwordless email OTP flow:
+
+1. User enters email → `POST /auth/send-code`
+2. User enters 6-digit code → `POST /auth/verify-code` → returns `user_id`
+3. `user_id` is stored in local SQLite `sync_meta` table
+4. All subsequent API requests include `X-User-ID: <user_id>` header
+
+In `development` mode (`EXPO_PUBLIC_APP_ENV=development`) the app calls `POST /auth/dev-login` instead, skipping OTP entirely — useful for testing without a Resend account.
+
+## Screens
+
+```
+app/
+├── login.tsx              # Email + OTP entry (or dev-login)
+├── onboarding.tsx         # Goal creation after first login
+├── (tabs)/
+│   ├── index.tsx          # Today's notes — list of goals with entry form
+│   ├── goal/
+│   │   └── [id].tsx       # Goal detail + full entry history
+│   ├── summary/
+│   │   ├── week/index.tsx   # Weekly report view + generate button
+│   │   ├── month/index.tsx  # Monthly report view + generate button
+│   │   └── year/index.tsx   # Yearly report view + generate button
+│   └── settings.tsx       # Language toggle, logout, sync controls
+```
+
+## Local-first sync model
+
+All data is written to SQLite first. The backend is an optional sync target.
+
+```
+User action
+    │
+    ▼
+SQLite (local)
+    │
+    ├─ [auto] on report generate  ──► push unsynced goals & entries
+    │                                          │
+    └─ [manual] sync button       ──► push unsynced goals & entries
+                                               │
+                                         backend stores,
+                                         generates embeddings
+```
+
+### Sync operations (`hooks/useSync.ts`)
+
+| Function | Description |
+|----------|-------------|
+| `sync()` | Push all unsynced goals and entries to backend |
+| `pushChanges()` | Same as sync without updating the sync timestamp |
+| `pullGoals()` | Fetch all goals from backend and upsert locally |
+| `pullEntries()` | Fetch all entries from backend and upsert locally |
+| `generateReport(period, ...)` | Push changes, then request report generation |
+| `pullReport(period, ...)` | Fetch an existing report and cache it locally |
+| `syncReports(period)` | Pull all reports of a period type not cached locally |
+
+### Data flow — creating an entry
+
+1. Entry is saved to local SQLite (`is_synced = 0`, no `remote_id`)
+2. On next `pushChanges()`, entry is `POST /entries` to backend
+3. Backend embeds the note text and stores in PostgreSQL
+4. Local entry is updated with `remote_id` and `is_synced = 1`
+
+## API client
+
+Typed wrappers in `api-client/` handle all backend communication:
+
+| File | Resource |
+|------|---------|
+| `config.ts` | `BASE_URL` — auto-detects host in dev, uses env var in prod |
+| `goals.ts` | `createGoal`, `listGoals` |
+| `entries.ts` | `createEntry`, `listEntries` |
+| `reports.ts` | `fetchReport`, `requestReport`, `listReports` |
+
+All functions accept `userId` and set `X-User-ID` automatically.
+
+## Internationalisation
+
+Translations live in `i18n/locales/`:
+- `en.json` — English (default)
+- `uk.json` — Ukrainian
+
+Language is stored in the backend user profile and synced on login. The user can switch language from Settings.
+
+## Database schema (SQLite)
+
+```
+goals        id · remote_id · title · description · is_synced
+entries      id · remote_id · goal_id · date_note · note
+             productivity_score · is_synced
+reports      period_type · period_key · period_start · period_end
+             avg_productivity · active_days · data (JSON)
+sync_meta    key · value  (stores user_remote_id, last_sync_at)
+```
