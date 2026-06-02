@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from src.core.dependencies import get_current_user
+from src.core.logging import get_logger
 from src.db.models import Report, User
 from src.db.session import get_async_sessionmaker
 from src.rag import db as rag_db
@@ -21,6 +22,7 @@ from src.rag.pipeline import app as pipeline
 from src.rag.state import DateDict
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+log = get_logger(__name__)
 
 
 class ReportResponse(BaseModel):
@@ -90,9 +92,16 @@ async def generate_report(
             "user_id": current_user.id,
         })
     except Exception as exc:
+        log.error(
+            "report_generation_failed",
+            user_id=current_user.id,
+            period=body.period,
+            error=str(exc),
+            exc_info=exc,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
+            detail="Report generation failed.",
         ) from exc
 
     if not state or not state.get("final_report"):

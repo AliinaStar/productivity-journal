@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useEntries } from '@/db/entries';
+import { useSync } from '@/hooks/useSync';
 import { Entry } from '@/db/types';
 import i18n from '@/i18n';
 
@@ -28,26 +29,39 @@ function scoreColor(score: number): string {
 export default function NotesList() {
   const { t } = useTranslation();
   const entries = useEntries();
+  const { pullGoals, pullEntries, pushChanges } = useSync();
   const [byDate, setByDate] = useState<{ date: string; count: number; avgScore: number }[]>([]);
 
   useFocusEffect(useCallback(() => {
     const from = '2000-01-01';
     const to = new Date().toISOString().split('T')[0];
-    entries.getByDateRange(from, to).then((all: Entry[]) => {
+
+    function processAndSet(all: Entry[]) {
       const map = new Map<string, number[]>();
       for (const e of all) {
         if (!map.has(e.date_note)) map.set(e.date_note, []);
         map.get(e.date_note)!.push(e.productivity_score);
       }
-      const result = Array.from(map.entries())
-        .sort((a, b) => b[0].localeCompare(a[0]))
-        .map(([date, scores]) => ({
-          date,
-          count: scores.length,
-          avgScore: Math.round((scores.reduce((s, x) => s + x, 0) / scores.length) * 10) / 10,
-        }));
-      setByDate(result);
-    });
+      setByDate(
+        Array.from(map.entries())
+          .sort((a, b) => b[0].localeCompare(a[0]))
+          .map(([date, scores]) => ({
+            date,
+            count: scores.length,
+            avgScore: Math.round((scores.reduce((s, x) => s + x, 0) / scores.length) * 10) / 10,
+          }))
+      );
+    }
+
+    // Show local data immediately
+    entries.getByDateRange(from, to).then(processAndSet);
+
+    // Push any local unsynced entries, then pull fresh data from backend
+    pullGoals()
+      .then(pushChanges)
+      .then(pullEntries)
+      .then(() => entries.getByDateRange(from, to))
+      .then(processAndSet);
   }, []));
 
   return (

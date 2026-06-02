@@ -1,5 +1,5 @@
 import { Goal, GoalStatus } from '@/db/types';
-import { BASE_URL } from './config';
+import { apiFetch } from './client';
 
 export interface RemoteGoal {
   id: number;
@@ -10,18 +10,16 @@ export interface RemoteGoal {
   status: GoalStatus;
 }
 
-export async function listGoals(userId: number): Promise<RemoteGoal[]> {
-  const res = await fetch(`${BASE_URL}/goals`, {
-    headers: { 'X-User-ID': String(userId) },
-  });
+export async function listGoals(): Promise<RemoteGoal[]> {
+  const res = await apiFetch('/goals');
   if (!res.ok) throw new Error(`Failed to list goals: ${res.status}`);
   return res.json();
 }
 
-export async function createGoal(goal: Omit<Goal, 'id' | 'remote_id' | 'synced'>, userId: number): Promise<RemoteGoal> {
-  const res = await fetch(`${BASE_URL}/goals`, {
+export async function createGoal(goal: Omit<Goal, 'id' | 'remote_id' | 'synced'>): Promise<RemoteGoal> {
+  const res = await apiFetch('/goals', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-User-ID': String(userId) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       title:       goal.title,
       description: goal.description,
@@ -35,10 +33,10 @@ export async function createGoal(goal: Omit<Goal, 'id' | 'remote_id' | 'synced'>
   return res.json();
 }
 
-export async function updateGoal(remoteId: number, data: Partial<Pick<Goal, 'title' | 'description' | 'deadline' | 'status'>>, userId: number): Promise<void> {
-  const res = await fetch(`${BASE_URL}/goals/${remoteId}`, {
+export async function updateGoal(remoteId: number, data: Partial<Pick<Goal, 'title' | 'description' | 'deadline' | 'status'>>): Promise<void> {
+  const res = await apiFetch(`/goals/${remoteId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'X-User-ID': String(userId) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
 

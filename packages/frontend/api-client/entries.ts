@@ -1,5 +1,5 @@
 import { Entry } from '@/db/types';
-import { BASE_URL } from './config';
+import { apiFetch } from './client';
 
 export interface RemoteEntry {
   id: number;
@@ -9,10 +9,8 @@ export interface RemoteEntry {
   productivity_score: number;
 }
 
-export async function listEntries(userId: number): Promise<RemoteEntry[]> {
-  const res = await fetch(`${BASE_URL}/entries`, {
-    headers: { 'X-User-ID': String(userId) },
-  });
+export async function listEntries(): Promise<RemoteEntry[]> {
+  const res = await apiFetch('/entries');
   if (!res.ok) throw new Error(`Failed to list entries: ${res.status}`);
   return res.json();
 }
@@ -20,11 +18,10 @@ export async function listEntries(userId: number): Promise<RemoteEntry[]> {
 export async function createEntry(
   entry: Omit<Entry, 'id' | 'remote_id' | 'synced' | 'goal_id'>,
   remoteGoalId: number,
-  userId: number,
 ): Promise<RemoteEntry> {
-  const res = await fetch(`${BASE_URL}/entries`, {
+  const res = await apiFetch('/entries', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-User-ID': String(userId) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       goal_id:            remoteGoalId,
       date_note:          entry.date_note,
@@ -40,11 +37,10 @@ export async function createEntry(
 export async function updateEntry(
   remoteId: number,
   data: Partial<Pick<Entry, 'note' | 'productivity_score' | 'date_note'>>,
-  userId: number,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/entries/${remoteId}`, {
+  const res = await apiFetch(`/entries/${remoteId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', 'X-User-ID': String(userId) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
 

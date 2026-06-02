@@ -33,7 +33,7 @@ class Entry(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     goal_id: Mapped[int] = mapped_column(ForeignKey("goal.id"))
     date_note: Mapped[date] = mapped_column(Date)
-    note: Mapped[str] = mapped_column(Text) # didn't create migration
+    note: Mapped[str] = mapped_column(Text)
     productivity_score: Mapped[int] = mapped_column(
         Integer,
         CheckConstraint("productivity_score BETWEEN 1 AND 5", name="check_productivity_score")
@@ -93,6 +93,7 @@ class AuthCode(Base):
     code: Mapped[str] = mapped_column(String(6), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
 
 
 class User(Base):

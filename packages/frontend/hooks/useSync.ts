@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useSQLiteContext } from 'expo-sqlite';
-
 import { useGoals } from '@/db/goals';
 import { useEntries } from '@/db/entries';
 import { useReports } from '@/db/reports';
@@ -14,6 +12,7 @@ import { toPeriodKey } from '@/utils/period';
 
 export function useSync() {
   const [syncing, setSyncing] = useState(false);
+  const [backgroundSyncing, setBackgroundSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const goals   = useGoals();
@@ -30,14 +29,19 @@ export function useSync() {
   // Push local unsynced data → backend
   // Goals must go before entries (entries reference goal remote_id)
   async function pushChanges(): Promise<void> {
-    const userId = await requireUserId();
+    await requireUserId();
 
     // 1. Sync unsynced goals
     const unsyncedGoals = await goals.getUnsynced();
 
     for (const goal of unsyncedGoals) {
-      const remote = await GoalsApi.createGoal(goal, userId);
-      await goals.markSynced(goal.id, remote.id);
+      if (goal.remote_id) {
+        await GoalsApi.updateGoal(goal.remote_id, { title: goal.title, description: goal.description, deadline: goal.deadline, status: goal.status });
+        await goals.markSynced(goal.id, goal.remote_id);
+      } else {
+        const remote = await GoalsApi.createGoal(goal);
+        await goals.markSynced(goal.id, remote.id);
+      }
     }
 
     // 2. Sync unsynced entries
@@ -52,7 +56,7 @@ export function useSync() {
         continue;
       }
 
-      const remote = await EntriesApi.createEntry(entry, localGoal.remote_id, userId);
+      const remote = await EntriesApi.createEntry(entry, localGoal.remote_id);
       await entries.markSynced(entry.id, remote.id);
     }
   }
@@ -64,8 +68,8 @@ export function useSync() {
     periodStart: string,
     periodEnd: string,
   ): Promise<void> {
-    const userId = await requireUserId();
-    const remote = await ReportsApi.fetchReport(period, periodStart, userId);
+    await requireUserId();
+    const remote = await ReportsApi.fetchReport(period, periodStart);
 
     if (!remote?.final_report) return;
 
@@ -88,8 +92,8 @@ export function useSync() {
     periodEnd: string,
   ): Promise<void> {
     await pushChanges();
-    const userId = await requireUserId();
-    const remote = await ReportsApi.requestReport(period, periodStart, periodEnd, userId);
+    await requireUserId();
+    const remote = await ReportsApi.requestReport(period, periodStart, periodEnd);
 
     if (!remote?.final_report) return;
 
@@ -104,18 +108,38 @@ export function useSync() {
     });
   }
 
-  // Full sync: push everything unsynced, update last sync timestamp
+  // Full sync: push local changes, then pull remote state
   async function sync(): Promise<void> {
     setSyncing(true);
     setError(null);
 
     try {
       await pushChanges();
+      await pullGoals();
+      await pullEntries();
       await syncMeta.setLastSyncAt(new Date().toISOString());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sync failed');
     } finally {
       setSyncing(false);
+    }
+  }
+
+  // Silent background sync — doesn't block the manual sync button
+  async function syncIfStale(thresholdMs = 5 * 60 * 1000): Promise<void> {
+    const lastSync = await syncMeta.getLastSyncAt();
+    if (lastSync && Date.now() - new Date(lastSync).getTime() < thresholdMs) return;
+
+    setBackgroundSyncing(true);
+    try {
+      await pushChanges();
+      await pullGoals();
+      await pullEntries();
+      await syncMeta.setLastSyncAt(new Date().toISOString());
+    } catch {
+      // background sync failures are silent
+    } finally {
+      setBackgroundSyncing(false);
     }
   }
 
@@ -126,33 +150,54 @@ export function useSync() {
   }
 
   async function pullGoals(): Promise<void> {
-    const userId = await requireUserId();
-    const remoteGoals = await GoalsApi.listGoals(userId);
+    await requireUserId();
+    const remoteGoals = await GoalsApi.listGoals();
+
+    const remoteIds = new Set(remoteGoals.map(g => g.id));
     for (const remote of remoteGoals) {
       await goals.upsertFromRemote(remote);
+    }
+
+    // Remove local goals that no longer exist on the backend
+    const localGoals = await goals.getAll();
+    for (const local of localGoals) {
+      if (local.remote_id && !remoteIds.has(local.remote_id)) {
+        await goals.remove(local.id);
+      }
     }
   }
 
   async function pullEntries(): Promise<void> {
-    const userId = await requireUserId();
-    const remoteEntries = await EntriesApi.listEntries(userId);
+    await requireUserId();
+    const remoteEntries = await EntriesApi.listEntries();
+
+    const remoteIds = new Set(remoteEntries.map(e => e.id));
     for (const remote of remoteEntries) {
       const localGoal = await goals.getByRemoteId(remote.goal_id);
       if (!localGoal) continue;
       await entries.upsertFromRemote(remote, localGoal.id);
     }
+
+    // Remove local entries that no longer exist on the backend
+    const localEntries = await entries.getAll();
+    for (const local of localEntries) {
+      if (local.remote_id && !remoteIds.has(local.remote_id)) {
+        await entries.remove(local.id);
+      }
+    }
   }
 
-  // Pull all reports of a given period type from backend and cache any that are missing locally
+  // Pull all reports of a given period type from backend — upsert new ones, remove deleted ones
   async function syncReports(period: PeriodType): Promise<void> {
-    const userId = await requireUserId();
-    const remoteList = await ReportsApi.listReports(period, userId);
+    await requireUserId();
+    const remoteList = await ReportsApi.listReports(period);
+
+    const remoteKeys = new Set<string>();
 
     for (const remote of remoteList) {
       if (!remote.final_report) continue;
       const key = toPeriodKey(period, remote.period_start);
-      const existing = await reports.get(period, key);
-      if (existing) continue;
+      remoteKeys.add(key);
 
       await reports.upsert({
         period_type:      period,
@@ -164,7 +209,15 @@ export function useSync() {
         data:             JSON.stringify(remote.final_report),
       });
     }
+
+    // Remove local reports that no longer exist on the backend
+    const localList = await reports.getAll(period);
+    for (const local of localList) {
+      if (!remoteKeys.has(local.period_key)) {
+        await reports.remove(period, local.period_key);
+      }
+    }
   }
 
-  return { sync, pushChanges, pullReport, generateReport, syncReports, pullGoals, pullEntries, clearLocalData, syncing, error };
+  return { sync, syncIfStale, pushChanges, pullReport, generateReport, syncReports, pullGoals, pullEntries, clearLocalData, syncing, backgroundSyncing, error };
 }

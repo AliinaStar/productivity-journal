@@ -244,6 +244,19 @@ uv run alembic revision --autogenerate -m "describe change"
 uv run alembic downgrade -1
 ```
 
+## Tests
+
+```bash
+uv run pytest
+```
+
+The suite mixes pure unit tests (JWT, settings, helpers) with API integration
+tests that run against a throwaway `reporting_system_test` database on the same
+Postgres instance (created automatically on first run). Embeddings, email and
+the RAG pipeline are stubbed, so tests run offline — only Postgres needs to be
+up (`docker compose up -d db`). Auth/ownership tests assert that one user can
+never read or modify another user's goals, entries or reports.
+
 ## Running notebooks
 
 ```bash

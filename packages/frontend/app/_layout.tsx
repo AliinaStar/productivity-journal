@@ -3,15 +3,14 @@ import { StatusBar } from 'expo-status-bar';
 import { SQLiteProvider } from 'expo-sqlite';
 import { useEffect } from 'react';
 import { migrateDb } from '@/db/schema';
-import { useSyncMeta } from '@/db/sync';
+import { getAccessToken } from '@/api-client/auth-store';
 import { useTranslation } from 'react-i18next';
 import '@/i18n';
 
 function AuthGuard() {
-  const syncMeta = useSyncMeta();
   useEffect(() => {
-    syncMeta.getUserRemoteId().then(id => {
-      if (!id) router.replace('/login');
+    getAccessToken().then(token => {
+      if (!token) router.replace('/login');
     });
   }, []);
   return null;

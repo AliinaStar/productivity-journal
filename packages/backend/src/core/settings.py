@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import computed_field
+from pydantic import computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_FILE = Path(__file__).parent.parent.parent / ".env"
@@ -20,6 +20,16 @@ class AppSettings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5433
     postgres_db: str = "reporting_system"
+
+    @model_validator(mode="after")
+    def _require_secrets_in_production(self) -> "AppSettings":
+        """Fail-closed: refuse to boot in production without a JWT secret."""
+        if self.app_env == "production" and not self.jwt_secret:
+            raise ValueError(
+                "JWT_SECRET must be set when APP_ENV=production. "
+                "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(64))'"
+            )
+        return self
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -40,14 +50,22 @@ class AppSettings(BaseSettings):
     resend_api_key: str = ""
     email_from: str = "noreply@yourdomain.com"
 
+    # Auth (JWT)
+    jwt_secret: str = ""
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 30
+    otp_max_attempts: int = 5
+
     # Langfuse
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_base_url: str = ""
 
     # App
-    app_env: str = "development"
+    app_env: str = "production"
     log_level: str = "INFO"
+    log_file: str = ""  # if set, structured logs are written to this file
     cors_origins: list[str] = ["http://localhost:3000"]
 
 

@@ -1,5 +1,5 @@
 import { PeriodType } from '@/db/types';
-import { BASE_URL } from './config';
+import { apiFetch } from './client';
 
 export interface RemoteReport {
   id: number;
@@ -13,10 +13,10 @@ export interface RemoteReport {
 }
 
 // Запит на генерацію звіту (бекенд запускає RAG pipeline)
-export async function requestReport(period: PeriodType, periodStart: string, periodEnd: string, userId: number): Promise<RemoteReport> {
-  const res = await fetch(`${BASE_URL}/reports/generate`, {
+export async function requestReport(period: PeriodType, periodStart: string, periodEnd: string): Promise<RemoteReport> {
+  const res = await apiFetch('/reports/generate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-User-ID': String(userId) },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ period, period_start: periodStart, period_end: periodEnd }),
   });
 
@@ -25,20 +25,15 @@ export async function requestReport(period: PeriodType, periodStart: string, per
 }
 
 // Отримати список всіх збережених звітів певного типу
-export async function listReports(period: PeriodType, userId: number): Promise<RemoteReport[]> {
-  const res = await fetch(`${BASE_URL}/reports/list?period=${period}`, {
-    headers: { 'X-User-ID': String(userId) },
-  });
+export async function listReports(period: PeriodType): Promise<RemoteReport[]> {
+  const res = await apiFetch(`/reports/list?period=${period}`);
   if (!res.ok) throw new Error(`Failed to list reports: ${res.status}`);
   return res.json();
 }
 
 // Отримати вже збережений звіт з бекенду
-export async function fetchReport(period: PeriodType, periodStart: string, userId: number): Promise<RemoteReport | null> {
-  const res = await fetch(`${BASE_URL}/reports?period=${period}&period_start=${periodStart}`, {
-    headers: { 'X-User-ID': String(userId) },
-  });
-
+export async function fetchReport(period: PeriodType, periodStart: string): Promise<RemoteReport | null> {
+  const res = await apiFetch(`/reports?period=${period}&period_start=${periodStart}`);
   if (!res.ok) throw new Error(`Failed to fetch report: ${res.status}`);
   return res.json();
 }

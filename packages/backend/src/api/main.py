@@ -9,9 +9,15 @@ Wires together:
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
+from src.core.logging import get_logger, setup_logging
+from src.core.ratelimit import limiter
 from src.core.settings import get_settings
 from src.db.session import get_async_sessionmaker
 from src.rag.scheduler import register_jobs, scheduler
@@ -21,6 +27,8 @@ from src.routes.goals import router as goals_router
 from src.routes.health import router as health_router
 from src.routes.reports import router as reports_router
 from src.routes.users import router as users_router
+
+log = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -45,6 +53,7 @@ def create_app() -> FastAPI:
         from src.api.main import create_app
         app = create_app()
     """
+    setup_logging()
     settings = get_settings()
 
     app = FastAPI(
@@ -55,12 +64,32 @@ def create_app() -> FastAPI:
 
     app.state.async_session = get_async_sessionmaker()
 
+    # Rate limiting (slowapi)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
+    # Never leak internal error details to clients; log them server-side instead.
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        log.error(
+            "unhandled_exception",
+            path=request.url.path,
+            method=request.method,
+            error=str(exc),
+            exc_info=exc,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "Internal server error."},
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
     )
 
     app.include_router(health_router)

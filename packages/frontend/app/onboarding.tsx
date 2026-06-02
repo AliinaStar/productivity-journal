@@ -2,16 +2,14 @@ import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useSyncMeta } from '@/db/sync';
 import { useSync } from '@/hooks/useSync';
-import { BASE_URL } from '@/api-client/config';
+import { apiFetch } from '@/api-client/client';
 
 const LANGUAGES = ['English', 'Ukrainian', 'Polish', 'German', 'French', 'Spanish'];
 const GENDER_KEYS = ['female', 'male', 'unspecified'] as const;
 
 export default function OnboardingScreen() {
   const { t } = useTranslation();
-  const syncMeta = useSyncMeta();
   const { pullGoals, pullEntries } = useSync();
   const [name, setName] = useState('');
   const [language, setLanguage] = useState('Ukrainian');
@@ -24,10 +22,9 @@ export default function OnboardingScreen() {
     setLoading(true);
     setError(null);
     try {
-      const userId = await syncMeta.getUserRemoteId();
-      const res = await fetch(`${BASE_URL}/users/me`, {
+      const res = await apiFetch('/users/me', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'X-User-ID': String(userId) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), language, gender }),
       });
       if (!res.ok) throw new Error();

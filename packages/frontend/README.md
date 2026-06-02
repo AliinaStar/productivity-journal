@@ -50,9 +50,9 @@ EXPO_PUBLIC_APP_ENV=development
 Passwordless email OTP flow:
 
 1. User enters email → `POST /auth/send-code`
-2. User enters 6-digit code → `POST /auth/verify-code` → returns `user_id`
-3. `user_id` is stored in local SQLite `sync_meta` table
-4. All subsequent API requests include `X-User-ID: <user_id>` header
+2. User enters 6-digit code → `POST /auth/verify-code` → returns a JWT `access_token` + `refresh_token`
+3. Tokens are stored in the OS secure store (`expo-secure-store`), not plain SQLite
+4. All subsequent API requests go through `apiFetch`, which adds `Authorization: Bearer <access_token>` and transparently refreshes via `POST /auth/refresh` on a 401
 
 In `development` mode (`EXPO_PUBLIC_APP_ENV=development`) the app calls `POST /auth/dev-login` instead, skipping OTP entirely — useful for testing without a Resend account.
 
@@ -117,11 +117,13 @@ Typed wrappers in `api-client/` handle all backend communication:
 | File | Resource |
 |------|---------|
 | `config.ts` | `BASE_URL` — auto-detects host in dev, uses env var in prod |
+| `client.ts` | `apiFetch` — Bearer auth + automatic token refresh on 401 |
+| `auth-store.ts` | JWT access/refresh token storage (`expo-secure-store`) |
 | `goals.ts` | `createGoal`, `listGoals` |
 | `entries.ts` | `createEntry`, `listEntries` |
 | `reports.ts` | `fetchReport`, `requestReport`, `listReports` |
 
-All functions accept `userId` and set `X-User-ID` automatically.
+All resource functions call `apiFetch`, which attaches the Bearer token automatically — no `userId` argument needed.
 
 ## Internationalisation
 

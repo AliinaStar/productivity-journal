@@ -6,8 +6,10 @@ import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { useGoals } from '@/db/goals';
+import { useEntries } from '@/db/entries';
 import { useSync } from '@/hooks/useSync';
 import { Goal } from '@/db/types';
+import { formatDeadline, DeadlineTone } from '@/utils/deadline';
 
 function todayLabel() {
   const locale = i18n.language === 'uk' ? 'uk-UA' : 'en-US';
@@ -17,17 +19,24 @@ function todayLabel() {
 export default function HomeScreen() {
   const { t } = useTranslation();
   const goals = useGoals();
-  const { sync, syncing } = useSync();
+  const entries = useEntries();
+  const { sync, pullGoals, syncing } = useSync();
   const [items, setItems] = useState<Goal[]>([]);
+  const [weekCount, setWeekCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   async function load() {
     const data = await goals.getActive();
     setItems(data);
+    const today = new Date();
+    const weekAgo = new Date(today.getTime() - 6 * 86_400_000);
+    const iso = (d: Date) => d.toISOString().split('T')[0];
+    const weekEntries = await entries.getByDateRange(iso(weekAgo), iso(today));
+    setWeekCount(weekEntries.length);
     setLoading(false);
   }
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+  useFocusEffect(useCallback(() => { pullGoals().then(load); }, []));
 
   async function handleSync() {
     await sync();
@@ -52,8 +61,8 @@ export default function HomeScreen() {
             <Text style={s.statLabel}>{t('home.activeGoals')}</Text>
           </View>
           <View style={s.statCard}>
-            <Text style={s.statValue}>🎯</Text>
-            <Text style={s.statLabel}>{t('home.focusLabel')}</Text>
+            <Text style={s.statValue}>{loading ? '—' : weekCount}</Text>
+            <Text style={s.statLabel}>{t('home.weekEntries')}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -70,11 +79,7 @@ export default function HomeScreen() {
             <Pressable style={s.goalCard} onPress={() => router.push(`/goal/${item.id}`)}>
               <Text style={s.goalTitle}>{item.title}</Text>
               {item.description ? <Text style={s.goalDesc}>{item.description}</Text> : null}
-              {item.deadline ? (
-                <View style={s.deadlineBadge}>
-                  <Text style={s.deadlineText}>{t('home.deadline', { date: item.deadline })}</Text>
-                </View>
-              ) : null}
+              {item.deadline ? <DeadlineBadge iso={item.deadline} /> : null}
             </Pressable>
           )}
           ListEmptyComponent={
@@ -86,6 +91,23 @@ export default function HomeScreen() {
       <Pressable style={s.fab} onPress={() => router.push('/goal')}>
         <Text style={s.fabText}>＋</Text>
       </Pressable>
+    </View>
+  );
+}
+
+const DEADLINE_TONE: Record<DeadlineTone, { bg: string; fg: string }> = {
+  overdue: { bg: '#FBE3DC', fg: '#C24A28' },
+  soon:    { bg: '#FFF4E6', fg: '#E8962A' },
+  normal:  { bg: '#EEEDFE', fg: '#7F77DD' },
+};
+
+function DeadlineBadge({ iso }: { iso: string }) {
+  const { t } = useTranslation();
+  const { text, tone } = formatDeadline(iso, t);
+  const c = DEADLINE_TONE[tone];
+  return (
+    <View style={[s.deadlineBadge, { backgroundColor: c.bg }]}>
+      <Text style={[s.deadlineText, { color: c.fg }]}>{text}</Text>
     </View>
   );
 }
@@ -108,8 +130,8 @@ const s = StyleSheet.create({
   goalCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16 },
   goalTitle: { fontSize: 15, fontWeight: '600', color: '#2C2C2A' },
   goalDesc: { fontSize: 13, color: '#888780', marginTop: 4 },
-  deadlineBadge: { marginTop: 10, alignSelf: 'flex-start', backgroundColor: '#FFF4E6', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  deadlineText: { fontSize: 11, color: '#E8962A', fontWeight: '600' },
+  deadlineBadge: { marginTop: 10, alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  deadlineText: { fontSize: 11, fontWeight: '600' },
   empty: { textAlign: 'center', marginTop: 60, fontSize: 14, color: '#B4B2A9', lineHeight: 22 },
   fab: { position: 'absolute', right: 20, bottom: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#7F77DD', alignItems: 'center', justifyContent: 'center', shadowColor: '#7F77DD', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
   fabText: { color: '#fff', fontSize: 28, lineHeight: 30 },

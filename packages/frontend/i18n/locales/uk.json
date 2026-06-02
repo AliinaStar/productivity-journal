@@ -8,10 +8,18 @@
   "home": {
     "greetDay": "Продуктивного дня!",
     "activeGoals": "активних цілей",
-    "focusLabel": "фокус на цілях",
+    "weekEntries": "нотаток за тиждень",
     "sectionLabel": "Активні цілі",
-    "empty": "Немає активних цілей.\nНатисни + щоб додати.",
-    "deadline": "до {{date}}"
+    "empty": "Немає активних цілей.\nНатисни + щоб додати."
+  },
+  "deadline": {
+    "today": "Сьогодні",
+    "tomorrow": "Завтра",
+    "inDays_one": "за {{count}} день",
+    "inDays_few": "за {{count}} дні",
+    "inDays_many": "за {{count}} днів",
+    "inDays_other": "за {{count}} днів",
+    "overdue": "Прострочено"
   },
   "notes": {
     "title": "Нотатки",

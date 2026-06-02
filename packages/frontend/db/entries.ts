@@ -9,6 +9,10 @@ function genId(): string {
 export function useEntries() {
   const db = useSQLiteContext();
 
+  async function getAll(): Promise<Entry[]> {
+    return db.getAllAsync<Entry>(`SELECT * FROM entries`);
+  }
+
   async function getByGoal(goalId: string): Promise<Entry[]> {
     return db.getAllAsync<Entry>(
       `SELECT * FROM entries WHERE goal_id = ? ORDER BY date_note DESC`,
@@ -137,6 +141,7 @@ export function useEntries() {
   }
 
   return {
+    getAll,
     getByGoal,
     getById,
     getByDateRange,

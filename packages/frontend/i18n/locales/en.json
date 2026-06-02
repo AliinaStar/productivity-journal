@@ -8,10 +8,16 @@
   "home": {
     "greetDay": "Productive day!",
     "activeGoals": "active goals",
-    "focusLabel": "goal focus",
+    "weekEntries": "notes this week",
     "sectionLabel": "Active goals",
-    "empty": "No active goals.\nTap + to add one.",
-    "deadline": "by {{date}}"
+    "empty": "No active goals.\nTap + to add one."
+  },
+  "deadline": {
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "inDays_one": "in {{count}} day",
+    "inDays_other": "in {{count}} days",
+    "overdue": "Overdue"
   },
   "notes": {
     "title": "Notes",

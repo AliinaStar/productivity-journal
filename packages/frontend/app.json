@@ -32,7 +32,8 @@
     "plugins": [
       "expo-router",
       "@react-native-community/datetimepicker",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-secure-store"
     ],
     "scheme": "bcr-app"
   }

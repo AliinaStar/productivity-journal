@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useSyncMeta } from '@/db/sync';
 import { useSync } from '@/hooks/useSync';
 import { BASE_URL } from '@/api-client/config';
+import { setTokens } from '@/api-client/auth-store';
 
 const IS_DEV = process.env.EXPO_PUBLIC_APP_ENV === 'development';
 
@@ -48,7 +49,8 @@ export default function LoginScreen() {
     }
   }
 
-  async function afterLogin(data: { user_id: number; is_new: boolean }) {
+  async function afterLogin(data: { access_token: string; refresh_token: string; user_id: number; is_new: boolean }) {
+    await setTokens(data.access_token, data.refresh_token);
     await syncMeta.setUserRemoteId(data.user_id);
     try { await clearLocalData(); } catch {}
     if (data.is_new) {

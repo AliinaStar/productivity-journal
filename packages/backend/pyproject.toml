@@ -31,6 +31,9 @@ dependencies = [
     "seaborn>=0.13.2",
     "matplotlib>=3.10.8",
     "scipy==1.15.3",
+    "pyjwt>=2.13.0",
+    "slowapi>=0.1.9",
+    "structlog>=25.5.0",
 ]
 
 [dependency-groups]
@@ -50,6 +53,7 @@ packages = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests"]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"

@@ -5,7 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { useSyncMeta } from '@/db/sync';
 import { useGoals } from '@/db/goals';
 import { useSync } from '@/hooks/useSync';
+import { clearTokens } from '@/api-client/auth-store';
 import { Goal } from '@/db/types';
+import { formatDeadline } from '@/utils/deadline';
+import type { TFunction } from 'i18next';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -21,6 +24,7 @@ export default function ProfileScreen() {
   }, []));
 
   async function handleLogout() {
+    await clearTokens();
     await clearLocalData();
     await syncMeta.set('user_remote_id', '');
     router.replace('/login');
@@ -67,7 +71,7 @@ const STATUS_COLOR: Record<string, string> = {
   postpone: '#B4B2A9',
 };
 
-function GoalGroup({ label, goals, t }: { label: string; goals: Goal[]; t: (k: string) => string }) {
+function GoalGroup({ label, goals, t }: { label: string; goals: Goal[]; t: TFunction }) {
   return (
     <View style={s.group}>
       <Text style={s.groupLabel}>{label}</Text>
@@ -87,7 +91,7 @@ function GoalGroup({ label, goals, t }: { label: string; goals: Goal[]; t: (k: s
             </View>
           </View>
           {goal.description ? <Text style={s.cardDesc} numberOfLines={2}>{goal.description}</Text> : null}
-          {goal.deadline ? <Text style={s.cardMeta}>до {goal.deadline}</Text> : null}
+          {goal.deadline ? <Text style={s.cardMeta}>{formatDeadline(goal.deadline, t).text}</Text> : null}
         </View>
       ))}
     </View>
