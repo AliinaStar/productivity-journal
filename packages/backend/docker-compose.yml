@@ -3,11 +3,14 @@ services:
     image: pgvector/pgvector:pg17
     container_name: bcr_data
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: reporting_system
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-reporting_system}
+    # Exposed for local development only. In production, do NOT publish the DB
+    # port — keep it on the internal Docker network and override via a
+    # docker-compose.prod.yml or by removing this mapping.
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

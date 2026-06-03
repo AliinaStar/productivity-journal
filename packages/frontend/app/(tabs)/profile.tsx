@@ -1,11 +1,13 @@
 import { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useSyncMeta } from '@/db/sync';
 import { useGoals } from '@/db/goals';
 import { useSync } from '@/hooks/useSync';
-import { clearTokens } from '@/api-client/auth-store';
+import { apiFetch, logout } from '@/api-client/client';
 import { Goal } from '@/db/types';
 import { formatDeadline } from '@/utils/deadline';
 import type { TFunction } from 'i18next';
@@ -17,17 +19,69 @@ export default function ProfileScreen() {
   const { clearLocalData } = useSync();
   const [userId, setUserId] = useState<number | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [busy, setBusy] = useState(false);
 
   useFocusEffect(useCallback(() => {
     syncMeta.getUserRemoteId().then(setUserId);
     goalsDb.getAll().then(setGoals);
   }, []));
 
-  async function handleLogout() {
-    await clearTokens();
+  async function clearSession() {
     await clearLocalData();
     await syncMeta.set('user_remote_id', '');
     router.replace('/login');
+  }
+
+  async function handleLogout() {
+    await logout(); // revokes refresh token server-side + clears local tokens
+    await clearSession();
+  }
+
+  async function handleExport() {
+    setBusy(true);
+    try {
+      const res = await apiFetch('/users/me/export');
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const uri = FileSystem.cacheDirectory + 'bcr-export.json';
+      await FileSystem.writeAsStringAsync(uri, JSON.stringify(data, null, 2));
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/json' });
+      } else {
+        Alert.alert(t('profile.exportSaved'));
+      }
+    } catch {
+      Alert.alert(t('profile.exportError'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      t('profile.deleteTitle'),
+      t('profile.deleteMessage'),
+      [
+        { text: t('profile.cancel'), style: 'cancel' },
+        {
+          text: t('profile.deleteConfirm'),
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            try {
+              const res = await apiFetch('/users/me', { method: 'DELETE' });
+              if (!res.ok && res.status !== 204) throw new Error();
+              await logout();
+              await clearSession();
+            } catch {
+              Alert.alert(t('profile.deleteError'));
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+    );
   }
 
   const active    = goals.filter(g => g.status === 'active');
@@ -45,8 +99,21 @@ export default function ProfileScreen() {
         </View>
         <Text style={s.name}>User {userId ?? '—'}</Text>
         <Text style={s.meta}>ID: {userId ?? '—'}</Text>
-        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
+        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} disabled={busy} activeOpacity={0.8}>
           <Text style={s.logoutText}>{t('profile.logout')}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={s.sectionTitle}>{t('profile.dataPrivacy')}</Text>
+      <View style={s.group}>
+        <TouchableOpacity style={s.row} onPress={handleExport} disabled={busy} activeOpacity={0.7}>
+          <Text style={s.rowText}>{t('profile.exportData')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.row} onPress={() => router.push('/privacy')} activeOpacity={0.7}>
+          <Text style={s.rowText}>{t('profile.privacyPolicy')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.row} onPress={handleDeleteAccount} disabled={busy} activeOpacity={0.7}>
+          <Text style={[s.rowText, s.danger]}>{t('profile.deleteAccount')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -110,7 +177,10 @@ const s = StyleSheet.create({
   meta: { fontSize: 13, color: '#888780', marginBottom: 16 },
   logoutBtn: { backgroundColor: '#FAECE7', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 24 },
   logoutText: { color: '#993C1D', fontSize: 14, fontWeight: '600' },
-  sectionTitle: { fontSize: 11, fontWeight: '700', color: '#B4B2A9', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
+  sectionTitle: { fontSize: 11, fontWeight: '700', color: '#B4B2A9', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12, marginTop: 8 },
+  row: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
+  rowText: { fontSize: 14, color: '#2C2C2A', fontWeight: '500' },
+  danger: { color: '#993C1D' },
   empty: { textAlign: 'center', color: '#B4B2A9', fontSize: 14, marginTop: 20 },
   group: { marginBottom: 20 },
   groupLabel: { fontSize: 11, fontWeight: '700', color: '#B4B2A9', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },

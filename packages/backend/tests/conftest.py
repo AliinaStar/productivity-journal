@@ -38,7 +38,7 @@ from src.core.settings import get_settings  # noqa: E402
 from src.db.base import Base  # noqa: E402
 
 _TEST_DB = "reporting_system_test"
-_TABLES = ['entry', 'goal', 'report', 'auth_code', '"user"']
+_TABLES = ['entry', 'goal', 'report', 'auth_code', 'refresh_token', '"user"']
 
 
 def _admin_dsn() -> str:
@@ -63,6 +63,8 @@ def _setup_database():
     engine = create_engine(sync_url)
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    # Rebuild from current models so schema changes are always reflected.
+    Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     engine.dispose()
     yield
@@ -146,14 +148,19 @@ def make_user(client):
 
 @pytest.fixture()
 def insert_auth_code(db):
-    """Factory to insert an AuthCode row directly, for verify-code tests."""
+    """Factory to insert an AuthCode row directly, for verify-code tests.
+
+    Stores the SHA-256 hash of *code* (matching production behaviour).
+    """
+    from src.routes.auth import _hash_code
+
     def _insert(email: str, code: str, *, minutes: int = 10, used: bool = False,
                 attempts: int = 0) -> None:
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=minutes)
         db.execute(
-            "INSERT INTO auth_code (email, code, expires_at, used, attempts) "
+            "INSERT INTO auth_code (email, code_hash, expires_at, used, attempts) "
             "VALUES (%s, %s, %s, %s, %s)",
-            (email, code, expires_at, used, attempts),
+            (email, _hash_code(code), expires_at, used, attempts),
         )
 
     return _insert

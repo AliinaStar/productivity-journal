@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.core.logging import get_logger, setup_logging
 from src.core.ratelimit import limiter
@@ -83,6 +84,21 @@ def create_app() -> FastAPI:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "Internal server error."},
         )
+
+    # Security headers. TLS itself is terminated by the reverse proxy (see
+    # README) — HSTS is only advertised outside development.
+    is_production = settings.app_env != "development"
+
+    async def _security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        if is_production:
+            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        return response
+
+    app.add_middleware(BaseHTTPMiddleware, dispatch=_security_headers)
 
     app.add_middleware(
         CORSMiddleware,

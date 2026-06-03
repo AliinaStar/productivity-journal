@@ -1,21 +1,23 @@
 """Passwordless email authentication.
 
 Flow:
-    1. POST /auth/send-code   → generates OTP, stores in DB, sends email.
+    1. POST /auth/send-code   → generates OTP, stores its hash, sends email.
     2. POST /auth/verify-code → validates OTP, creates user if new, returns JWT tokens.
-    3. POST /auth/refresh     → exchanges a valid refresh token for a new access token.
+    3. POST /auth/refresh     → exchanges a valid (allow-listed) refresh token for a new access token.
+    4. POST /auth/logout      → revokes a refresh token server-side.
 
 Dev-only:
     POST /auth/dev-login → skips OTP, returns tokens directly (only in development).
 """
 
+import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from src.core.email import send_login_code
 from src.core.logging import get_logger
@@ -23,10 +25,10 @@ from src.core.ratelimit import limiter
 from src.core.security import (
     create_access_token,
     create_refresh_token,
-    decode_token,
+    decode_token_payload,
 )
 from src.core.settings import get_settings
-from src.db.models import AuthCode, User
+from src.db.models import AuthCode, RefreshToken, User
 from src.db.session import get_async_sessionmaker
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -36,6 +38,11 @@ log = get_logger(__name__)
 def _generate_code() -> str:
     # secrets.choice is cryptographically secure (unlike random.choices).
     return "".join(secrets.choice("0123456789") for _ in range(6))
+
+
+def _hash_code(code: str) -> str:
+    """SHA-256 hex digest of an OTP. Plaintext codes are never persisted."""
+    return hashlib.sha256(code.encode()).hexdigest()
 
 
 class SendCodeRequest(BaseModel):
@@ -68,10 +75,20 @@ class RefreshResponse(BaseModel):
     token_type: str = "bearer"
 
 
-def _tokens_for(user: User, is_new: bool) -> TokenResponse:
+class LogoutRequest(BaseModel):
+    refresh_token: str
+
+
+async def _issue_tokens(session, user: User, is_new: bool) -> TokenResponse:
+    """Create access + refresh tokens and allow-list the refresh token's jti."""
+    jti = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        days=get_settings().refresh_token_expire_days
+    )
+    session.add(RefreshToken(jti=jti, user_id=user.id, expires_at=expires_at))
     return TokenResponse(
         access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id),
+        refresh_token=create_refresh_token(user.id, jti),
         user_id=user.id,
         is_new=is_new,
     )
@@ -84,6 +101,7 @@ async def _get_or_create_user(session, email: str) -> tuple[User, bool]:
     if is_new:
         user = User(name=email.split("@")[0], email=email, language="English")
         session.add(user)
+        await session.flush()  # populate user.id before issuing tokens
     return user, is_new
 
 
@@ -92,9 +110,9 @@ async def _get_or_create_user(session, email: str) -> tuple[User, bool]:
 async def send_code(request: Request, body: SendCodeRequest) -> SendCodeResponse:
     """Generate a 6-digit OTP and email it to the user.
 
-    Invalidates any previously unused codes for the same email before
-    creating a new one. Always returns 200 regardless of whether the
-    email is registered (security: do not reveal account existence).
+    Only the SHA-256 hash of the code is stored. Invalidates any previously
+    unused codes for the same email. Always returns 200 regardless of whether
+    the email is registered (security: do not reveal account existence).
     """
     session_factory = get_async_sessionmaker()
     code = _generate_code()
@@ -112,7 +130,7 @@ async def send_code(request: Request, body: SendCodeRequest) -> SendCodeResponse
 
         session.add(AuthCode(
             email=body.email,
-            code=code,
+            code_hash=_hash_code(code),
             expires_at=expires_at,
             used=False,
         ))
@@ -164,16 +182,15 @@ async def verify_code(request: Request, body: VerifyCodeRequest) -> TokenRespons
                 detail="Too many attempts. Request a new code.",
             )
 
-        if not secrets.compare_digest(auth_code.code, body.code):
+        if not secrets.compare_digest(auth_code.code_hash, _hash_code(body.code)):
             auth_code.attempts += 1
             await session.commit()
             raise invalid
 
         auth_code.used = True
         user, is_new = await _get_or_create_user(session, body.email)
+        tokens = await _issue_tokens(session, user, is_new)
         await session.commit()
-        await session.refresh(user)
-        tokens = _tokens_for(user, is_new)
 
     return tokens
 
@@ -181,19 +198,61 @@ async def verify_code(request: Request, body: VerifyCodeRequest) -> TokenRespons
 @router.post("/refresh", response_model=RefreshResponse)
 @limiter.limit("60/hour")
 async def refresh(request: Request, body: RefreshRequest) -> RefreshResponse:
-    """Exchange a valid refresh token for a fresh access token.
+    """Exchange an allow-listed refresh token for a fresh access token.
 
     Raises:
-        401: If the refresh token is missing, malformed, expired, or wrong type.
+        401: If the refresh token is missing, malformed, expired, wrong type,
+             or has been revoked / is not in the server allowlist.
+    """
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired refresh token.",
+    )
+    try:
+        payload = decode_token_payload(body.refresh_token, expected_type="refresh")
+    except jwt.InvalidTokenError:
+        raise unauthorized
+
+    jti = payload["jti"]
+    if jti is None:
+        raise unauthorized
+
+    session_factory = get_async_sessionmaker()
+    now = datetime.now(timezone.utc)
+    async with session_factory() as session:
+        row = (await session.execute(
+            select(RefreshToken).where(RefreshToken.jti == jti)
+        )).scalars().first()
+
+        if row is None or row.revoked or row.expires_at.replace(tzinfo=timezone.utc) < now:
+            raise unauthorized
+
+    return RefreshResponse(access_token=create_access_token(payload["user_id"]))
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(body: LogoutRequest) -> None:
+    """Revoke a refresh token so it can no longer be used.
+
+    Idempotent: an unknown or already-revoked token is treated as success
+    (we never reveal whether a token existed).
     """
     try:
-        user_id = decode_token(body.refresh_token, expected_type="refresh")
+        payload = decode_token_payload(body.refresh_token, expected_type="refresh")
     except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired refresh token.",
+        return None
+
+    jti = payload["jti"]
+    if jti is None:
+        return None
+
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        await session.execute(
+            update(RefreshToken).where(RefreshToken.jti == jti).values(revoked=True)
         )
-    return RefreshResponse(access_token=create_access_token(user_id))
+        await session.commit()
+    return None
 
 
 @router.post("/dev-login", response_model=TokenResponse)
@@ -209,8 +268,7 @@ async def dev_login(body: SendCodeRequest) -> TokenResponse:
     session_factory = get_async_sessionmaker()
     async with session_factory() as session:
         user, is_new = await _get_or_create_user(session, body.email)
+        tokens = await _issue_tokens(session, user, is_new)
         await session.commit()
-        await session.refresh(user)
-        tokens = _tokens_for(user, is_new)
 
     return tokens

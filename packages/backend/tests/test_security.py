@@ -14,8 +14,13 @@ def test_access_token_roundtrip():
 
 
 def test_refresh_token_roundtrip():
-    token = security.create_refresh_token(7)
+    token = security.create_refresh_token(7, jti="abc")
     assert security.decode_token(token, "refresh") == 7
+
+
+def test_refresh_token_carries_jti():
+    token = security.create_refresh_token(7, jti="my-jti")
+    assert security.decode_token_payload(token, "refresh")["jti"] == "my-jti"
 
 
 def test_access_token_rejected_as_refresh():
@@ -25,7 +30,7 @@ def test_access_token_rejected_as_refresh():
 
 
 def test_refresh_token_rejected_as_access():
-    token = security.create_refresh_token(1)
+    token = security.create_refresh_token(1, jti="abc")
     with pytest.raises(jwt.InvalidTokenError):
         security.decode_token(token, "access")
 

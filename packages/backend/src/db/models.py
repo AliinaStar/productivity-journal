@@ -90,10 +90,29 @@ class AuthCode(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(250), nullable=False, index=True)
-    code: Mapped[str] = mapped_column(String(6), nullable=False)
+    # SHA-256 hex digest of the OTP — the plaintext code is never stored.
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+
+
+class RefreshToken(Base):
+    """Server-side allowlist of issued refresh tokens.
+
+    JWTs are stateless, so to support real logout / revocation we track each
+    issued refresh token by its ``jti`` claim. ``/auth/refresh`` only succeeds
+    if a matching, non-revoked, non-expired row exists. Logout flips
+    ``revoked`` to ``True``. Expired/revoked rows are purged by a periodic job.
+    """
+
+    __tablename__ = "refresh_token"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    jti: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false", default=False)
 
 
 class User(Base):
@@ -107,6 +126,8 @@ class User(Base):
         Enum("male", "female", "unspecified", name="gender"),
         nullable=True
     )
+    # Timestamp at which the user accepted the privacy policy (GDPR consent).
+    consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     reports: Mapped[list["Report"]] = relationship(back_populates="user")
     goals: Mapped[list['Goal']] = relationship(back_populates="user")

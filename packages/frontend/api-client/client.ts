@@ -9,6 +9,23 @@ export class AuthError extends Error {
   }
 }
 
+/** Revoke the refresh token server-side, then clear local tokens. Best-effort. */
+export async function logout(): Promise<void> {
+  const refreshToken = await getRefreshToken();
+  if (refreshToken) {
+    try {
+      await fetch(`${BASE_URL}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+    } catch {
+      // Network failure on logout is non-fatal — local tokens are cleared anyway.
+    }
+  }
+  await clearTokens();
+}
+
 async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = await getRefreshToken();
   if (!refreshToken) return null;

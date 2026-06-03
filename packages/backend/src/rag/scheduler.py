@@ -14,11 +14,14 @@ Cron schedule (UTC):
 import asyncio
 import json
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy import delete, or_
 
+from src.db.models import AuthCode, RefreshToken
+from src.db.session import get_async_sessionmaker
 from src.rag import db
 from src.rag.pipeline import app as pipeline
 from src.rag.state import DateDict
@@ -105,6 +108,26 @@ async def _run_yearly() -> None:
     await generate_reports_for_period("year", {"year": yesterday.year})
 
 
+async def cleanup_auth_artifacts() -> None:
+    """Delete spent OTP codes and dead refresh tokens.
+
+    Removes used/expired ``auth_code`` rows and expired/revoked
+    ``refresh_token`` rows so neither table grows unbounded.
+    """
+    now = datetime.now(timezone.utc)
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        await session.execute(
+            delete(AuthCode).where(or_(AuthCode.used.is_(True), AuthCode.expires_at < now))
+        )
+        await session.execute(
+            delete(RefreshToken).where(
+                or_(RefreshToken.revoked.is_(True), RefreshToken.expires_at < now)
+            )
+        )
+        await session.commit()
+
+
 def register_jobs() -> None:
     """Register all cron jobs on the module-level ``scheduler`` instance.
 
@@ -113,3 +136,4 @@ def register_jobs() -> None:
     scheduler.add_job(_run_weekly,  CronTrigger(day_of_week="mon", hour=0, minute=1))
     scheduler.add_job(_run_monthly, CronTrigger(day=1,              hour=0, minute=1))
     scheduler.add_job(_run_yearly,  CronTrigger(month=1,  day=1,    hour=0, minute=1))
+    scheduler.add_job(cleanup_auth_artifacts, CronTrigger(hour=3, minute=0))

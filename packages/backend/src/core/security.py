@@ -28,7 +28,12 @@ def _secret() -> str:
     return settings.jwt_secret or _DEV_FALLBACK_SECRET
 
 
-def _create_token(user_id: int, token_type: TokenType, expires_delta: timedelta) -> str:
+def _create_token(
+    user_id: int,
+    token_type: TokenType,
+    expires_delta: timedelta,
+    jti: str | None = None,
+) -> str:
     settings = get_settings()
     now = datetime.now(timezone.utc)
     payload = {
@@ -37,6 +42,8 @@ def _create_token(user_id: int, token_type: TokenType, expires_delta: timedelta)
         "iat": now,
         "exp": now + expires_delta,
     }
+    if jti is not None:
+        payload["jti"] = jti
     return jwt.encode(payload, _secret(), algorithm=settings.jwt_algorithm)
 
 
@@ -47,15 +54,26 @@ def create_access_token(user_id: int) -> str:
     )
 
 
-def create_refresh_token(user_id: int) -> str:
+def create_refresh_token(user_id: int, jti: str) -> str:
+    """Create a refresh token carrying a unique ``jti`` for server-side revocation."""
     settings = get_settings()
     return _create_token(
-        user_id, "refresh", timedelta(days=settings.refresh_token_expire_days)
+        user_id, "refresh", timedelta(days=settings.refresh_token_expire_days), jti=jti
     )
 
 
 def decode_token(token: str, expected_type: TokenType) -> int:
     """Decode and validate a JWT, returning the user id (``sub``).
+
+    Raises:
+        jwt.InvalidTokenError: If the signature/expiry is invalid, or the token
+            is not of ``expected_type``.
+    """
+    return decode_token_payload(token, expected_type)["user_id"]
+
+
+def decode_token_payload(token: str, expected_type: TokenType) -> dict:
+    """Decode and validate a JWT, returning ``{"user_id": int, "jti": str | None}``.
 
     Raises:
         jwt.InvalidTokenError: If the signature/expiry is invalid, or the token
@@ -68,4 +86,4 @@ def decode_token(token: str, expected_type: TokenType) -> int:
     sub = payload.get("sub")
     if sub is None:
         raise jwt.InvalidTokenError("Missing subject claim.")
-    return int(sub)
+    return {"user_id": int(sub), "jti": payload.get("jti")}

@@ -14,11 +14,13 @@ export default function OnboardingScreen() {
   const [name, setName] = useState('');
   const [language, setLanguage] = useState('Ukrainian');
   const [gender, setGender] = useState('unspecified');
+  const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
     if (!name.trim()) { setError(t('onboarding.errorName')); return; }
+    if (!consent) { setError(t('onboarding.consentRequired')); return; }
     setLoading(true);
     setError(null);
     try {
@@ -28,6 +30,7 @@ export default function OnboardingScreen() {
         body: JSON.stringify({ name: name.trim(), language, gender }),
       });
       if (!res.ok) throw new Error();
+      await apiFetch('/users/me/consent', { method: 'POST' });
       try { await pullGoals(); await pullEntries(); } catch {}
       router.replace('/(tabs)');
     } catch {
@@ -70,6 +73,16 @@ export default function OnboardingScreen() {
         ))}
       </View>
 
+      <TouchableOpacity style={s.consentRow} onPress={() => setConsent(c => !c)} activeOpacity={0.7}>
+        <View style={[s.checkbox, consent && s.checkboxOn]}>
+          {consent && <Text style={s.checkboxTick}>✓</Text>}
+        </View>
+        <Text style={s.consentText}>{t('onboarding.consent')}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => router.push('/privacy')} activeOpacity={0.7}>
+        <Text style={s.policyLink}>{t('onboarding.viewPolicy')}</Text>
+      </TouchableOpacity>
+
       {error && <Text style={s.error}>{error}</Text>}
 
       <TouchableOpacity style={s.btn} onPress={handleSave} disabled={loading} activeOpacity={0.8}>
@@ -94,4 +107,10 @@ const s = StyleSheet.create({
   error: { fontSize: 13, color: '#993C1D', marginBottom: 12 },
   btn: { backgroundColor: '#7F77DD', borderRadius: 12, padding: 15, alignItems: 'center', marginTop: 8 },
   btnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  consentRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 8 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: '#B4B2A9', alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  checkboxOn: { backgroundColor: '#7F77DD', borderColor: '#7F77DD' },
+  checkboxTick: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  consentText: { flex: 1, fontSize: 13, color: '#5F5E5A', lineHeight: 18 },
+  policyLink: { fontSize: 13, color: '#7F77DD', marginTop: 10, marginLeft: 32 },
 });

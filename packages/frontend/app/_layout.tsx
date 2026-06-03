@@ -29,6 +29,7 @@ export default function RootLayout() {
         <Stack.Screen name="goal" options={{ title: t('nav.newGoal') }} />
         <Stack.Screen name="goal/[id]" options={{ title: t('nav.addNote') }} />
         <Stack.Screen name="notes/[id]" options={{ title: t('nav.notesList') }} />
+        <Stack.Screen name="privacy" options={{ title: t('profile.privacyPolicy') }} />
       </Stack>
     </SQLiteProvider>
   );
