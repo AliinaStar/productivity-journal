@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from src.core.dependencies import get_current_user
+from src.core.dependencies import Pagination, get_current_user, get_pagination
 from src.db.models import Entry, Goal, User
 from src.db.session import get_async_sessionmaker
 from src.rag.embeddings import embed_text
@@ -57,6 +57,7 @@ async def _embed(text: str) -> list[float]:
 
 @router.get("", response_model=list[EntryResponse])
 async def list_entries(
+    page: Pagination = Depends(get_pagination),
     current_user: User = Depends(get_current_user),
 ) -> list[EntryResponse]:
     session_factory = get_async_sessionmaker()
@@ -65,7 +66,9 @@ async def list_entries(
             select(Entry)
             .join(Goal, Entry.goal_id == Goal.id)
             .where(Goal.user_id == current_user.id)
-            .order_by(Entry.date_note.desc())
+            .order_by(Entry.date_note.desc(), Entry.id.desc())
+            .limit(page.limit)
+            .offset(page.offset)
         )
         entries = result.scalars().all()
     return [_to_response(e) for e in entries]

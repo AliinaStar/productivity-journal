@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Text, TouchableOpacity, ScrollView, StyleSheet, View, ActivityIndicator, Alert } from 'react-native';
+import { Text, TouchableOpacity, ScrollView, StyleSheet, View, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useReports } from '@/db/reports';
@@ -7,27 +7,13 @@ import { useSync } from '@/hooks/useSync';
 import { ReportCache } from '@/db/types';
 import { toPeriodKey, periodLabel } from '@/utils/period';
 
-function currentWeekDates(): { start: string; end: string } {
-  const now = new Date();
-  const day = (now.getDay() + 6) % 7; // Monday = 0
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - day);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  return {
-    start: monday.toISOString().split('T')[0],
-    end: sunday.toISOString().split('T')[0],
-  };
-}
-
 export default function WeekList() {
   const { t } = useTranslation();
   const router = useRouter();
   const reports = useReports();
-  const { syncReports, generateReport } = useSync();
+  const { syncReports } = useSync();
   const [items, setItems] = useState<ReportCache[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
 
   async function load() {
     try { await syncReports('week'); } catch (e) { console.error('syncReports error:', e); }
@@ -38,28 +24,10 @@ export default function WeekList() {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
-  async function handleGenerate() {
-    setGenerating(true);
-    try {
-      const { start, end } = currentWeekDates();
-      await generateReport('week', toPeriodKey('week', start), start, end);
-      await load();
-    } catch {
-      Alert.alert(t('summary.generateError'));
-    } finally {
-      setGenerating(false);
-    }
-  }
-
   return (
     <ScrollView style={s.scroll} contentContainerStyle={s.content}>
       <View style={s.headerRow}>
         <Text style={s.header}>{t('summary.weeks')}</Text>
-        <TouchableOpacity style={s.genBtn} onPress={handleGenerate} disabled={generating} activeOpacity={0.7}>
-          {generating
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={s.genBtnText}>{t('summary.generate')}</Text>}
-        </TouchableOpacity>
       </View>
       {loading ? (
         <ActivityIndicator color="#7F77DD" />

@@ -84,15 +84,19 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com
 
 ## API reference
 
-All endpoints except `/auth/*` and `/health` require the `X-User-ID` header (integer returned by `/auth/verify-code` or `/auth/dev-login`).
+All endpoints except `/auth/*` and `/health` require the `Authorization: Bearer <access_token>` header (tokens are returned by `/auth/verify-code` or `/auth/dev-login`).
 
 ### Auth
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/auth/send-code` | Generate OTP and email it |
-| `POST` | `/auth/verify-code` | Validate OTP, create user if new, return `user_id` |
+| `POST` | `/auth/send-code` | Generate OTP (hashed) and email it |
+| `POST` | `/auth/verify-code` | Validate OTP, create user if new, return access + refresh tokens |
+| `POST` | `/auth/refresh` | Exchange an allow-listed refresh token for a new access token |
+| `POST` | `/auth/logout` | Revoke a refresh token server-side |
 | `POST` | `/auth/dev-login` | Skip OTP — dev mode only |
+
+List endpoints (`/goals`, `/entries`, `/reports/list`) accept `?limit=` (default 50, max 100) and `?offset=`.
 
 ### Goals
 
@@ -113,18 +117,22 @@ All endpoints except `/auth/*` and `/health` require the `X-User-ID` header (int
 
 ### Reports
 
+Reports are generated automatically by the scheduler (see *Automatic report generation*); there is no manual generation endpoint.
+
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/reports/generate` | Run RAG pipeline and save report |
 | `GET` | `/reports` | Fetch a stored report by period and date |
-| `GET` | `/reports/list` | List all stored reports for a period |
+| `GET` | `/reports/list` | List stored reports for a period (paginated) |
 
 ### Users
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/users/me` | Get current user profile |
-| `PATCH` | `/users/me` | Update language or gender |
+| `PATCH` | `/users/me` | Update name, language or gender |
+| `POST` | `/users/me/consent` | Record privacy-policy consent (GDPR) |
+| `GET` | `/users/me/export` | Export all of the user's data as JSON (GDPR) |
+| `DELETE` | `/users/me` | Permanently delete the account and all data (GDPR) |
 
 ### Health
 
@@ -243,6 +251,26 @@ uv run alembic revision --autogenerate -m "describe change"
 # Roll back one step
 uv run alembic downgrade -1
 ```
+
+## Deployment & TLS
+
+The API speaks plain HTTP; TLS is terminated by a reverse proxy in front of it.
+Never expose the API (or the Postgres port) directly in production. The app sets
+security headers itself (`X-Content-Type-Options`, `X-Frame-Options`,
+`Referrer-Policy`, and `Strict-Transport-Security` outside development).
+
+Minimal [Caddy](https://caddyserver.com/) config (automatic Let's Encrypt certs):
+
+```caddy
+api.example.com {
+    reverse_proxy localhost:8000
+}
+```
+
+Production checklist:
+- Set `APP_ENV=production` and a strong `JWT_SECRET` (the app refuses to boot otherwise).
+- Set real `POSTGRES_PASSWORD` in `.env`; remove the `db` port mapping from `docker-compose.yml`.
+- Put the API behind HTTPS (Caddy/nginx) and set `CORS_ORIGINS` to your real origin.
 
 ## Tests
 

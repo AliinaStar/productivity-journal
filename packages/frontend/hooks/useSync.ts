@@ -10,6 +10,22 @@ import * as ReportsApi from '@/api-client/reports';
 import { PeriodType } from '@/db/types';
 import { toPeriodKey } from '@/utils/period';
 
+// Matches the backend's max page limit so offline sync stays complete.
+const PAGE_SIZE = 100;
+
+/** Fetch every page from a paginated endpoint until a short page is returned. */
+async function fetchAllPages<T>(fetchPage: (offset: number) => Promise<T[]>): Promise<T[]> {
+  const all: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = await fetchPage(offset);
+    all.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+  return all;
+}
+
 export function useSync() {
   const [syncing, setSyncing] = useState(false);
   const [backgroundSyncing, setBackgroundSyncing] = useState(false);
@@ -84,30 +100,6 @@ export function useSync() {
     });
   }
 
-  // Request backend to generate a new report, then cache it
-  async function generateReport(
-    period: PeriodType,
-    periodKey: string,
-    periodStart: string,
-    periodEnd: string,
-  ): Promise<void> {
-    await pushChanges();
-    await requireUserId();
-    const remote = await ReportsApi.requestReport(period, periodStart, periodEnd);
-
-    if (!remote?.final_report) return;
-
-    await reports.upsert({
-      period_type:      period,
-      period_key:       periodKey,
-      period_start:     periodStart,
-      period_end:       periodEnd,
-      avg_productivity: remote.avg_productivity,
-      active_days:      remote.active_days,
-      data:             JSON.stringify(remote.final_report),
-    });
-  }
-
   // Full sync: push local changes, then pull remote state
   async function sync(): Promise<void> {
     setSyncing(true);
@@ -151,7 +143,7 @@ export function useSync() {
 
   async function pullGoals(): Promise<void> {
     await requireUserId();
-    const remoteGoals = await GoalsApi.listGoals();
+    const remoteGoals = await fetchAllPages(offset => GoalsApi.listGoals(PAGE_SIZE, offset));
 
     const remoteIds = new Set(remoteGoals.map(g => g.id));
     for (const remote of remoteGoals) {
@@ -169,7 +161,7 @@ export function useSync() {
 
   async function pullEntries(): Promise<void> {
     await requireUserId();
-    const remoteEntries = await EntriesApi.listEntries();
+    const remoteEntries = await fetchAllPages(offset => EntriesApi.listEntries(PAGE_SIZE, offset));
 
     const remoteIds = new Set(remoteEntries.map(e => e.id));
     for (const remote of remoteEntries) {
@@ -190,7 +182,7 @@ export function useSync() {
   // Pull all reports of a given period type from backend — upsert new ones, remove deleted ones
   async function syncReports(period: PeriodType): Promise<void> {
     await requireUserId();
-    const remoteList = await ReportsApi.listReports(period);
+    const remoteList = await fetchAllPages(offset => ReportsApi.listReports(period, PAGE_SIZE, offset));
 
     const remoteKeys = new Set<string>();
 
@@ -219,5 +211,5 @@ export function useSync() {
     }
   }
 
-  return { sync, syncIfStale, pushChanges, pullReport, generateReport, syncReports, pullGoals, pullEntries, clearLocalData, syncing, backgroundSyncing, error };
+  return { sync, syncIfStale, pushChanges, pullReport, syncReports, pullGoals, pullEntries, clearLocalData, syncing, backgroundSyncing, error };
 }

@@ -12,21 +12,9 @@ export interface RemoteReport {
   final_report: Record<string, unknown> | null;
 }
 
-// Запит на генерацію звіту (бекенд запускає RAG pipeline)
-export async function requestReport(period: PeriodType, periodStart: string, periodEnd: string): Promise<RemoteReport> {
-  const res = await apiFetch('/reports/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ period, period_start: periodStart, period_end: periodEnd }),
-  });
-
-  if (!res.ok) throw new Error(`Failed to generate report: ${res.status}`);
-  return res.json();
-}
-
-// Отримати список всіх збережених звітів певного типу
-export async function listReports(period: PeriodType): Promise<RemoteReport[]> {
-  const res = await apiFetch(`/reports/list?period=${period}`);
+// Отримати список збережених звітів певного типу (звіти генеруються планувальником на бекенді)
+export async function listReports(period: PeriodType, limit = 100, offset = 0): Promise<RemoteReport[]> {
+  const res = await apiFetch(`/reports/list?period=${period}&limit=${limit}&offset=${offset}`);
   if (!res.ok) throw new Error(`Failed to list reports: ${res.status}`);
   return res.json();
 }

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Text, TouchableOpacity, ScrollView, StyleSheet, View, ActivityIndicator, Alert } from 'react-native';
+import { Text, TouchableOpacity, ScrollView, StyleSheet, View, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useReports } from '@/db/reports';
@@ -7,19 +7,13 @@ import { useSync } from '@/hooks/useSync';
 import { ReportCache } from '@/db/types';
 import { toPeriodKey } from '@/utils/period';
 
-function currentYearDates(): { start: string; end: string } {
-  const year = new Date().getFullYear();
-  return { start: `${year}-01-01`, end: `${year}-12-31` };
-}
-
 export default function YearList() {
   const { t } = useTranslation();
   const router = useRouter();
   const reports = useReports();
-  const { syncReports, generateReport } = useSync();
+  const { syncReports } = useSync();
   const [items, setItems] = useState<ReportCache[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
 
   async function load() {
     try { await syncReports('year'); } catch {}
@@ -30,28 +24,10 @@ export default function YearList() {
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
-  async function handleGenerate() {
-    setGenerating(true);
-    try {
-      const { start, end } = currentYearDates();
-      await generateReport('year', toPeriodKey('year', start), start, end);
-      await load();
-    } catch {
-      Alert.alert(t('summary.generateError'));
-    } finally {
-      setGenerating(false);
-    }
-  }
-
   return (
     <ScrollView style={s.scroll} contentContainerStyle={s.content}>
       <View style={s.headerRow}>
         <Text style={s.header}>{t('summary.years')}</Text>
-        <TouchableOpacity style={s.genBtn} onPress={handleGenerate} disabled={generating} activeOpacity={0.7}>
-          {generating
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={s.genBtnText}>{t('summary.generate')}</Text>}
-        </TouchableOpacity>
       </View>
       {loading ? (
         <ActivityIndicator color="#7F77DD" />

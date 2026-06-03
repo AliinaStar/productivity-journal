@@ -1,9 +1,6 @@
 """Unit tests for small pure route helpers."""
 
-from datetime import date
-
-from src.routes.auth import _generate_code
-from src.routes.reports import _date_to_dict
+from src.routes.auth import _generate_code, _hash_code
 
 
 def test_generate_code_is_six_digits():
@@ -13,14 +10,7 @@ def test_generate_code_is_six_digits():
         assert code.isdigit()
 
 
-def test_date_to_dict_week():
-    # 2025-04-07 is ISO week 15 of 2025.
-    assert _date_to_dict("week", date(2025, 4, 7)) == {"year": 2025, "week": 15}
-
-
-def test_date_to_dict_month():
-    assert _date_to_dict("month", date(2025, 4, 7)) == {"year": 2025, "month": 4}
-
-
-def test_date_to_dict_year():
-    assert _date_to_dict("year", date(2025, 4, 7)) == {"year": 2025}
+def test_hash_code_is_deterministic_sha256():
+    assert _hash_code("123456") == _hash_code("123456")
+    assert _hash_code("123456") != _hash_code("654321")
+    assert len(_hash_code("123456")) == 64  # SHA-256 hex digest

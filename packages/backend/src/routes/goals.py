@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from src.core.dependencies import get_current_user
+from src.core.dependencies import Pagination, get_current_user, get_pagination
 from src.db.models import Goal, User
 from src.db.session import get_async_sessionmaker
 
@@ -55,12 +55,17 @@ def _to_response(goal: Goal) -> GoalResponse:
 
 @router.get("", response_model=list[GoalResponse])
 async def list_goals(
+    page: Pagination = Depends(get_pagination),
     current_user: User = Depends(get_current_user),
 ) -> list[GoalResponse]:
     session_factory = get_async_sessionmaker()
     async with session_factory() as session:
         result = await session.execute(
-            select(Goal).where(Goal.user_id == current_user.id).order_by(Goal.created_at.desc())
+            select(Goal)
+            .where(Goal.user_id == current_user.id)
+            .order_by(Goal.created_at.desc(), Goal.id.desc())
+            .limit(page.limit)
+            .offset(page.offset)
         )
         goals = result.scalars().all()
     return [_to_response(g) for g in goals]

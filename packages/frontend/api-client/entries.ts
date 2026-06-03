@@ -9,8 +9,8 @@ export interface RemoteEntry {
   productivity_score: number;
 }
 
-export async function listEntries(): Promise<RemoteEntry[]> {
-  const res = await apiFetch('/entries');
+export async function listEntries(limit = 100, offset = 0): Promise<RemoteEntry[]> {
+  const res = await apiFetch(`/entries?limit=${limit}&offset=${offset}`);
   if (!res.ok) throw new Error(`Failed to list entries: ${res.status}`);
   return res.json();
 }

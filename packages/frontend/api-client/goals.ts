@@ -10,8 +10,8 @@ export interface RemoteGoal {
   status: GoalStatus;
 }
 
-export async function listGoals(): Promise<RemoteGoal[]> {
-  const res = await apiFetch('/goals');
+export async function listGoals(limit = 100, offset = 0): Promise<RemoteGoal[]> {
+  const res = await apiFetch(`/goals?limit=${limit}&offset=${offset}`);
   if (!res.ok) throw new Error(`Failed to list goals: ${res.status}`);
   return res.json();
 }
