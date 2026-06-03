@@ -1,13 +1,13 @@
 {
-  "name": "bcr-app",
+  "name": "litopys",
   "version": "0.1.0",
   "private": true,
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "mobile": "npm run start --workspace=@bcr-app/mobile",
-    "api": "npm run dev --workspace=@bcr-app/api",
+    "mobile": "npm run start --workspace=@litopys/mobile",
+    "api": "npm run dev --workspace=@litopys/api",
     "install:all": "npm install && npm install --workspaces"
   },
   "devDependencies": {

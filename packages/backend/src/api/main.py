@@ -58,7 +58,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="BCR Report API",
+        title="Litopys Report API",
         version="0.1.0",
         lifespan=lifespan,
     )

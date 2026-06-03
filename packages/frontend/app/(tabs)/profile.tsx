@@ -43,7 +43,7 @@ export default function ProfileScreen() {
       const res = await apiFetch('/users/me/export');
       if (!res.ok) throw new Error();
       const data = await res.json();
-      const uri = FileSystem.cacheDirectory + 'bcr-export.json';
+      const uri = FileSystem.cacheDirectory + 'litopys-export.json';
       await FileSystem.writeAsStringAsync(uri, JSON.stringify(data, null, 2));
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/json' });

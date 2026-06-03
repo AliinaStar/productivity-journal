@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "BCR App",
-    "slug": "bcr-app",
+    "name": "Litopys",
+    "slug": "litopys",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -16,14 +16,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.bcr.app"
+      "bundleIdentifier": "com.litopys.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.bcr.app"
+      "package": "com.litopys.app"
     },
     "web": {
       "bundler": "metro",
@@ -35,6 +35,6 @@
       "expo-sqlite",
       "expo-secure-store"
     ],
-    "scheme": "bcr-app"
+    "scheme": "litopys"
   }
 }

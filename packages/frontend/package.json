@@ -1,5 +1,5 @@
 {
-  "name": "@bcr-app/mobile",
+  "name": "@litopys/mobile",
   "version": "0.1.0",
   "main": "expo-router/entry",
   "scripts": {
@@ -11,7 +11,7 @@
     "test": "jest"
   },
   "dependencies": {
-    "@bcr-app/shared": "*",
+    "@litopys/shared": "*",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-picker/picker": "2.11.1",

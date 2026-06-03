@@ -1,6 +1,6 @@
-# Backend — BCR Report API
+# Backend — Litopys Report API
 
-FastAPI backend for the BCR productivity journal. Handles authentication, data storage, embedding generation, and AI report creation.
+FastAPI backend for the Litopys productivity journal. Handles authentication, data storage, embedding generation, and AI report creation.
 
 ## Stack
 

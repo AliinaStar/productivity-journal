@@ -1,4 +1,4 @@
-# Frontend — BCR Productivity Journal
+# Frontend — Litopys Productivity Journal
 
 React Native (Expo) mobile app for logging daily productivity notes and viewing AI-generated reports.
 

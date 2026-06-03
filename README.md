@@ -1,4 +1,4 @@
-# BCR — Productivity Journal
+# Litopys — Productivity Journal
 
 Personal productivity tracking app with AI-generated weekly, monthly, and yearly reports.
 

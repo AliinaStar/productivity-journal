@@ -6,7 +6,7 @@
       "@/*": [
         "./*"
       ],
-      "@bcr-app/shared": [
+      "@litopys/shared": [
         "../shared/src"
       ]
     }
