@@ -11,6 +11,12 @@ def test_production_requires_jwt_secret():
         AppSettings(app_env="production", jwt_secret="", _env_file=None)
 
 
+def test_non_dev_env_requires_jwt_secret():
+    # Any non-development env (e.g. staging) must not fall back to the dev secret.
+    with pytest.raises(ValidationError):
+        AppSettings(app_env="staging", jwt_secret="", _env_file=None)
+
+
 def test_production_with_secret_ok():
     s = AppSettings(app_env="production", jwt_secret="x" * 40, _env_file=None)
     assert s.app_env == "production"

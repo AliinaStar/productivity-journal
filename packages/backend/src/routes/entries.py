@@ -7,7 +7,7 @@ Entries are scoped to goals that belong to the current user.
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from src.core.dependencies import Pagination, get_current_user, get_pagination
@@ -16,6 +16,18 @@ from src.db.session import get_async_sessionmaker
 from src.rag.embeddings import embed_text
 
 router = APIRouter(prefix="/entries", tags=["entries"])
+
+NOTE_MAX_LENGTH = 5000
+
+
+def _validate_iso_date(value: str | None) -> str | None:
+    if value is None:
+        return value
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("date_note must be an ISO date (YYYY-MM-DD).") from exc
+    return value
 
 
 class EntryResponse(BaseModel):
@@ -31,14 +43,18 @@ class EntryResponse(BaseModel):
 class CreateEntryRequest(BaseModel):
     goal_id: int
     date_note: str
-    note: str
-    productivity_score: int
+    note: str = Field(min_length=1, max_length=NOTE_MAX_LENGTH)
+    productivity_score: int = Field(ge=1, le=5)
+
+    _check_date = field_validator("date_note")(_validate_iso_date)
 
 
 class UpdateEntryRequest(BaseModel):
-    note: str | None = None
-    productivity_score: int | None = None
+    note: str | None = Field(default=None, min_length=1, max_length=NOTE_MAX_LENGTH)
+    productivity_score: int | None = Field(default=None, ge=1, le=5)
     date_note: str | None = None
+
+    _check_date = field_validator("date_note")(_validate_iso_date)
 
 
 def _to_response(entry: Entry) -> EntryResponse:

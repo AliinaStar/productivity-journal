@@ -25,7 +25,13 @@ TokenType = Literal["access", "refresh"]
 
 def _secret() -> str:
     settings = get_settings()
-    return settings.jwt_secret or _DEV_FALLBACK_SECRET
+    if settings.jwt_secret:
+        return settings.jwt_secret
+    # Defence in depth: the insecure fallback is only ever acceptable in dev.
+    # (Settings validation already blocks an empty secret outside development.)
+    if settings.app_env != "development":
+        raise RuntimeError("JWT_SECRET is required outside development.")
+    return _DEV_FALLBACK_SECRET
 
 
 def _create_token(

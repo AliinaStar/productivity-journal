@@ -35,4 +35,6 @@ services:
     restart: on-failure
 
 volumes:
+  # In production, ensure the host disk backing this volume is encrypted at
+  # rest (LUKS / encrypted block storage) — see README "Encryption at rest".
   postgres_data:

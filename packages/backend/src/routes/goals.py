@@ -4,9 +4,10 @@ Matches the contract expected by ``api-client/goals.ts`` on the frontend.
 """
 
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from src.core.dependencies import Pagination, get_current_user, get_pagination
@@ -14,6 +15,18 @@ from src.db.models import Goal, User
 from src.db.session import get_async_sessionmaker
 
 router = APIRouter(prefix="/goals", tags=["goals"])
+
+GoalStatus = Literal["active", "postpone", "finished"]
+
+
+def _validate_iso_date(value: str | None) -> str | None:
+    if value is None:
+        return value
+    try:
+        date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("date must be in ISO format (YYYY-MM-DD).") from exc
+    return value
 
 
 class GoalResponse(BaseModel):
@@ -28,18 +41,23 @@ class GoalResponse(BaseModel):
 
 
 class CreateGoalRequest(BaseModel):
-    title: str
-    description: str | None = None
+    title: str = Field(min_length=1, max_length=250)
+    description: str | None = Field(default=None, max_length=500)
     deadline: str | None = None
-    status: str = "active"
+    status: GoalStatus = "active"
     created_at: str
+
+    _check_deadline = field_validator("deadline")(_validate_iso_date)
+    _check_created_at = field_validator("created_at")(_validate_iso_date)
 
 
 class UpdateGoalRequest(BaseModel):
-    title: str | None = None
-    description: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=250)
+    description: str | None = Field(default=None, max_length=500)
     deadline: str | None = None
-    status: str | None = None
+    status: GoalStatus | None = None
+
+    _check_deadline = field_validator("deadline")(_validate_iso_date)
 
 
 def _to_response(goal: Goal) -> GoalResponse:

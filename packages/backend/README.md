@@ -267,10 +267,30 @@ api.example.com {
 }
 ```
 
+### Encryption at rest
+
+Journal data is sensitive, so the database must be encrypted at rest at the
+storage layer:
+
+- **Managed Postgres** (Neon, Supabase, RDS, Cloud SQL, …): enable
+  "encryption at rest" — usually a single setting when creating the instance.
+- **Self-hosted**: put the Postgres data directory on an encrypted volume
+  (LUKS / dm-crypt, or the cloud provider's encrypted block storage). The
+  Docker named volume `postgres_data` inherits the host volume's encryption,
+  so encrypt the underlying disk, not just the container.
+- **Backups**: encrypt database dumps/snapshots too — an unencrypted backup
+  defeats the purpose.
+
+This protects against a stolen disk or leaked backup. It does **not** protect
+against access from inside the database (a compromised app/DB user still reads
+plaintext); column-level encryption of `entry.note` would be the next step if
+that threat matters.
+
 Production checklist:
 - Set `APP_ENV=production` and a strong `JWT_SECRET` (the app refuses to boot otherwise).
 - Set real `POSTGRES_PASSWORD` in `.env`; remove the `db` port mapping from `docker-compose.yml`.
 - Put the API behind HTTPS (Caddy/nginx) and set `CORS_ORIGINS` to your real origin.
+- Enable encryption at rest on the database volume and on backups (see above).
 
 ## Tests
 

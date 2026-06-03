@@ -22,11 +22,16 @@ class AppSettings(BaseSettings):
     postgres_db: str = "reporting_system"
 
     @model_validator(mode="after")
-    def _require_secrets_in_production(self) -> "AppSettings":
-        """Fail-closed: refuse to boot in production without a JWT secret."""
-        if self.app_env == "production" and not self.jwt_secret:
+    def _require_secrets_outside_dev(self) -> "AppSettings":
+        """Fail-closed: only 'development' may run without an explicit JWT secret.
+
+        Any other value (production, staging, …) must set JWT_SECRET — otherwise
+        tokens would be signed with the public insecure dev fallback and could be
+        forged for any user.
+        """
+        if self.app_env != "development" and not self.jwt_secret:
             raise ValueError(
-                "JWT_SECRET must be set when APP_ENV=production. "
+                f"JWT_SECRET must be set when APP_ENV={self.app_env!r}. "
                 "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(64))'"
             )
         return self
