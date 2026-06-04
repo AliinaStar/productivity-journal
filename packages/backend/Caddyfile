@@ -1,0 +1,5 @@
+# Caddy automatically obtains and renews a free Let's Encrypt TLS
+# certificate for this domain, then reverse-proxies to the API container.
+api.litopys.app {
+	reverse_proxy api:8000
+}
