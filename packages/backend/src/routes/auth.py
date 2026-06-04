@@ -72,6 +72,7 @@ class RefreshRequest(BaseModel):
 
 class RefreshResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
 
 
@@ -79,16 +80,21 @@ class LogoutRequest(BaseModel):
     refresh_token: str
 
 
-async def _issue_tokens(session, user: User, is_new: bool) -> TokenResponse:
-    """Create access + refresh tokens and allow-list the refresh token's jti."""
+def _new_refresh_token(session, user_id: int) -> str:
+    """Allow-list a fresh refresh-token ``jti`` and return the signed JWT."""
     jti = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(
         days=get_settings().refresh_token_expire_days
     )
-    session.add(RefreshToken(jti=jti, user_id=user.id, expires_at=expires_at))
+    session.add(RefreshToken(jti=jti, user_id=user_id, expires_at=expires_at))
+    return create_refresh_token(user_id, jti)
+
+
+async def _issue_tokens(session, user: User, is_new: bool) -> TokenResponse:
+    """Create access + refresh tokens and allow-list the refresh token's jti."""
     return TokenResponse(
         access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id, jti),
+        refresh_token=_new_refresh_token(session, user.id),
         user_id=user.id,
         is_new=is_new,
     )
@@ -198,7 +204,16 @@ async def verify_code(request: Request, body: VerifyCodeRequest) -> TokenRespons
 @router.post("/refresh", response_model=RefreshResponse)
 @limiter.limit("60/hour")
 async def refresh(request: Request, body: RefreshRequest) -> RefreshResponse:
-    """Exchange an allow-listed refresh token for a fresh access token.
+    """Exchange a refresh token for a fresh access + refresh token pair.
+
+    The presented refresh token is rotated: it is revoked and replaced with a
+    brand-new one. This gives active users a sliding session — they stay logged
+    in indefinitely while they keep using the app, instead of being forced to
+    re-authenticate a fixed number of days after their last login.
+
+    Reuse detection: presenting an already-rotated (revoked) token is treated as
+    a sign of theft — every refresh token for that user is revoked, forcing a
+    fresh login on all devices.
 
     Raises:
         401: If the refresh token is missing, malformed, expired, wrong type,
@@ -224,10 +239,27 @@ async def refresh(request: Request, body: RefreshRequest) -> RefreshResponse:
             select(RefreshToken).where(RefreshToken.jti == jti)
         )).scalars().first()
 
-        if row is None or row.revoked or row.expires_at.replace(tzinfo=timezone.utc) < now:
+        if row is None or row.expires_at.replace(tzinfo=timezone.utc) < now:
             raise unauthorized
 
-    return RefreshResponse(access_token=create_access_token(payload["user_id"]))
+        if row.revoked:
+            # This token was already rotated away or logged out. A second use
+            # means the stored token leaked — burn the whole family.
+            await session.execute(
+                update(RefreshToken)
+                .where(RefreshToken.user_id == row.user_id)
+                .values(revoked=True)
+            )
+            await session.commit()
+            raise unauthorized
+
+        # Rotate: burn the presented token and mint a fresh pair.
+        row.revoked = True
+        new_access = create_access_token(row.user_id)
+        new_refresh = _new_refresh_token(session, row.user_id)
+        await session.commit()
+
+    return RefreshResponse(access_token=new_access, refresh_token=new_refresh)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

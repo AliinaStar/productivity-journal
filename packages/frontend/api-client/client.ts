@@ -1,5 +1,11 @@
 import { BASE_URL } from './config';
-import { clearTokens, getAccessToken, getRefreshToken, setAccessToken } from './auth-store';
+import {
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken,
+} from './auth-store';
 
 /** Thrown when the session can no longer be authenticated and the user must sign in again. */
 export class AuthError extends Error {
@@ -26,7 +32,7 @@ export async function logout(): Promise<void> {
   await clearTokens();
 }
 
-async function refreshAccessToken(): Promise<string | null> {
+async function doRefresh(): Promise<string | null> {
   const refreshToken = await getRefreshToken();
   if (!refreshToken) return null;
 
@@ -39,7 +45,24 @@ async function refreshAccessToken(): Promise<string | null> {
 
   const data = await res.json();
   await setAccessToken(data.access_token);
+  // The server rotates the refresh token on every exchange; persist the new one
+  // so the next refresh doesn't replay the now-revoked token.
+  if (data.refresh_token) await setRefreshToken(data.refresh_token);
   return data.access_token;
+}
+
+// Single-flight: concurrent 401s share one refresh call. Without this, the
+// second request would replay a refresh token the first has already rotated
+// away, tripping the server's reuse detection and logging the user out.
+let refreshInFlight: Promise<string | null> | null = null;
+
+function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
 }
 
 /**

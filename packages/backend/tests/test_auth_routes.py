@@ -117,6 +117,33 @@ def test_refresh_returns_working_access_token(client, make_user):
     assert me.status_code == 200
 
 
+def test_refresh_rotates_the_refresh_token(client, make_user):
+    user = make_user("rotate@example.com")
+    res = client.post("/auth/refresh", json={"refresh_token": user["refresh_token"]})
+    assert res.status_code == 200
+
+    new_refresh = res.json()["refresh_token"]
+    # A fresh, working refresh token is returned...
+    assert new_refresh and new_refresh != user["refresh_token"]
+    again = client.post("/auth/refresh", json={"refresh_token": new_refresh})
+    assert again.status_code == 200
+
+
+def test_refresh_rejects_a_rotated_token_and_revokes_the_family(client, make_user):
+    user = make_user("reuse@example.com")
+    first = client.post("/auth/refresh", json={"refresh_token": user["refresh_token"]})
+    assert first.status_code == 200
+    new_refresh = first.json()["refresh_token"]
+
+    # Replaying the original (now-rotated) token is rejected...
+    replay = client.post("/auth/refresh", json={"refresh_token": user["refresh_token"]})
+    assert replay.status_code == 401
+
+    # ...and reuse detection has burned the whole family, including the new one.
+    after = client.post("/auth/refresh", json={"refresh_token": new_refresh})
+    assert after.status_code == 401
+
+
 def test_refresh_rejects_access_token(client, make_user):
     user = make_user("misuse@example.com")
     res = client.post("/auth/refresh", json={"refresh_token": user["access_token"]})

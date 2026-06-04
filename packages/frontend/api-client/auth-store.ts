@@ -13,6 +13,10 @@ export async function setAccessToken(access: string): Promise<void> {
   await SecureStore.setItemAsync(ACCESS_KEY, access);
 }
 
+export async function setRefreshToken(refresh: string): Promise<void> {
+  await SecureStore.setItemAsync(REFRESH_KEY, refresh);
+}
+
 export async function getAccessToken(): Promise<string | null> {
   return SecureStore.getItemAsync(ACCESS_KEY);
 }
