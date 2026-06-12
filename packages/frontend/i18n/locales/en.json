@@ -32,9 +32,6 @@
     "months": "Months",
     "years": "Years",
     "noReports": "No saved reports",
-    "generate": "Generate report",
-    "generating": "Generating...",
-    "generateError": "Failed to generate report",
     "activeDays_one": "{{count}} active day",
     "activeDays_other": "{{count}} active days"
   },
@@ -57,6 +54,8 @@
     "myGoals": "My goals",
     "noGoals": "No goals yet",
     "logout": "Log out",
+    "notifications": "Reminders",
+    "reminderTime": "Daily reminder time",
     "dataPrivacy": "Data & privacy",
     "exportData": "Export my data (JSON)",
     "privacyPolicy": "Privacy policy",
@@ -138,6 +137,10 @@
     "save": "Save",
     "errorEmpty": "Please write a note",
     "errorSave": "Failed to save"
+  },
+  "notifications": {
+    "dailyTitle": "Time for a note ✍️",
+    "dailyBody": "Write down what you did for your goals today."
   },
   "nav": {
     "newGoal": "New goal",

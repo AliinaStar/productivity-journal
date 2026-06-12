@@ -36,9 +36,6 @@
     "months": "Місяці",
     "years": "Роки",
     "noReports": "Немає збережених звітів",
-    "generate": "Згенерувати звіт",
-    "generating": "Генерується...",
-    "generateError": "Не вдалося згенерувати звіт",
     "activeDays_one": "{{count}} активний день",
     "activeDays_few": "{{count}} активних дні",
     "activeDays_many": "{{count}} активних днів",
@@ -63,6 +60,8 @@
     "myGoals": "Мої цілі",
     "noGoals": "Цілей ще немає",
     "logout": "Вийти",
+    "notifications": "Нагадування",
+    "reminderTime": "Час щоденного нагадування",
     "dataPrivacy": "Дані та приватність",
     "exportData": "Експортувати мої дані (JSON)",
     "privacyPolicy": "Політика приватності",
@@ -144,6 +143,10 @@
     "save": "Зберегти",
     "errorEmpty": "Напиши нотатку",
     "errorSave": "Помилка збереження"
+  },
+  "notifications": {
+    "dailyTitle": "Час для нотатки ✍️",
+    "dailyBody": "Запиши, що ти сьогодні зробила для своїх цілей."
   },
   "nav": {
     "newGoal": "Нова ціль",

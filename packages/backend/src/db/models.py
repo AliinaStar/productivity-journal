@@ -137,6 +137,9 @@ class User(Base):
     )
     # Timestamp at which the user accepted the privacy policy (GDPR consent).
     consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Expo push token of the user's most recent device (ExponentPushToken[...]).
+    # NULL when the user never granted notification permissions.
+    expo_push_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     reports: Mapped[list["Report"]] = relationship(back_populates="user")
     goals: Mapped[list['Goal']] = relationship(back_populates="user")

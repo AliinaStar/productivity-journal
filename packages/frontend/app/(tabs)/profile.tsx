@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -8,6 +9,13 @@ import { useSyncMeta } from '@/db/sync';
 import { useGoals } from '@/db/goals';
 import { useSync } from '@/hooks/useSync';
 import { apiFetch, logout } from '@/api-client/client';
+import {
+  DEFAULT_REMINDER_TIME,
+  ReminderTime,
+  getReminderTime,
+  setReminderTime,
+  unregisterPushToken,
+} from '@/utils/notifications';
 import { Goal } from '@/db/types';
 import { formatDeadline } from '@/utils/deadline';
 import type { TFunction } from 'i18next';
@@ -20,11 +28,22 @@ export default function ProfileScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [busy, setBusy] = useState(false);
+  const [reminder, setReminder] = useState<ReminderTime>(DEFAULT_REMINDER_TIME);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   useFocusEffect(useCallback(() => {
     syncMeta.getUserRemoteId().then(setUserId);
     goalsDb.getAll().then(setGoals);
+    getReminderTime().then(setReminder);
   }, []));
+
+  function onReminderChange(event: DateTimePickerEvent, selected?: Date) {
+    setShowTimePicker(false);
+    if (event.type !== 'set' || !selected) return;
+    const time = { hour: selected.getHours(), minute: selected.getMinutes() };
+    setReminder(time);
+    setReminderTime(time); // persists + reschedules the local notification
+  }
 
   async function clearSession() {
     await clearLocalData();
@@ -33,6 +52,7 @@ export default function ProfileScreen() {
   }
 
   async function handleLogout() {
+    await unregisterPushToken(); // must happen while the session is still valid
     await logout(); // revokes refresh token server-side + clears local tokens
     await clearSession();
   }
@@ -102,6 +122,25 @@ export default function ProfileScreen() {
         <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} disabled={busy} activeOpacity={0.8}>
           <Text style={s.logoutText}>{t('profile.logout')}</Text>
         </TouchableOpacity>
+      </View>
+
+      <Text style={s.sectionTitle}>{t('profile.notifications')}</Text>
+      <View style={s.group}>
+        <TouchableOpacity style={[s.row, s.rowBetween]} onPress={() => setShowTimePicker(true)} activeOpacity={0.7}>
+          <Text style={s.rowText}>{t('profile.reminderTime')}</Text>
+          <Text style={s.rowValue}>
+            {`${String(reminder.hour).padStart(2, '0')}:${String(reminder.minute).padStart(2, '0')}`}
+          </Text>
+        </TouchableOpacity>
+        {showTimePicker && (
+          <DateTimePicker
+            value={new Date(2000, 0, 1, reminder.hour, reminder.minute)}
+            mode="time"
+            is24Hour
+            display="default"
+            onChange={onReminderChange}
+          />
+        )}
       </View>
 
       <Text style={s.sectionTitle}>{t('profile.dataPrivacy')}</Text>
@@ -179,7 +218,9 @@ const s = StyleSheet.create({
   logoutText: { color: '#993C1D', fontSize: 14, fontWeight: '600' },
   sectionTitle: { fontSize: 11, fontWeight: '700', color: '#B4B2A9', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12, marginTop: 8 },
   row: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   rowText: { fontSize: 14, color: '#2C2C2A', fontWeight: '500' },
+  rowValue: { fontSize: 14, color: '#7F77DD', fontWeight: '600' },
   danger: { color: '#993C1D' },
   empty: { textAlign: 'center', color: '#B4B2A9', fontSize: 14, marginTop: 20 },
   group: { marginBottom: 20 },

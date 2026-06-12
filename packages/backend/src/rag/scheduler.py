@@ -20,6 +20,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import delete, or_
 
+from src.core.push import send_push
 from src.db.models import AuthCode, RefreshToken
 from src.db.session import get_async_sessionmaker
 from src.rag import db
@@ -33,6 +34,38 @@ scheduler = AsyncIOScheduler()
 # Limits the number of pipeline runs (LLM calls) executing at the same time.
 # Remaining tasks wait in the asyncio queue until a slot is freed.
 _semaphore = asyncio.Semaphore(10)
+
+# Push notification texts for "your report is ready", keyed by report period.
+# user.language stores free-form values like "Ukrainian" / "English".
+_REPORT_PUSH_TEXTS = {
+    "uk": {
+        "title": "Звіт готовий 📊",
+        "week": "Твій звіт за тиждень сформовано. Зайди подивитися!",
+        "month": "Твій звіт за місяць сформовано. Зайди подивитися!",
+        "year": "Твій звіт за рік сформовано. Зайди подивитися!",
+    },
+    "en": {
+        "title": "Report ready 📊",
+        "week": "Your weekly report is ready. Take a look!",
+        "month": "Your monthly report is ready. Take a look!",
+        "year": "Your yearly report is ready. Take a look!",
+    },
+}
+
+
+async def _notify_report_ready(user_id: int, period: str) -> None:
+    """Send a 'report is ready' push to the user, if they have a device token."""
+    user = await db.get_user(user_id)
+    if not user or not user.expo_push_token:
+        return
+    lang = "uk" if (user.language or "").lower().startswith("ukrain") else "en"
+    texts = _REPORT_PUSH_TEXTS[lang]
+    await send_push(
+        token=user.expo_push_token,
+        title=texts["title"],
+        body=texts[period],
+        data={"type": "report_ready", "period": period},
+    )
 
 
 async def _generate_one(user_id: int, period: str, date_dict: DateDict) -> None:
@@ -73,6 +106,7 @@ async def _generate_one(user_id: int, period: str, date_dict: DateDict) -> None:
                 active_days=state.get("active_days", 0),
                 final_report=json.loads(state["final_report"]),
             )
+            await _notify_report_ready(user_id, period)
         except Exception:
             logger.exception("Failed to generate report for user=%s period=%s", user_id, period)
 

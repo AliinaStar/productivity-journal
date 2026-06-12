@@ -22,6 +22,11 @@ class UpdateProfileRequest(BaseModel):
     gender: Literal["male", "female", "unspecified"] | None = None
 
 
+class PushTokenRequest(BaseModel):
+    # None unregisters the device (e.g. on logout or revoked permission).
+    token: str | None = Field(default=None, max_length=100)
+
+
 class ProfileResponse(BaseModel):
     id: int
     name: str
@@ -68,6 +73,18 @@ async def update_profile(
     await session.refresh(current_user)
 
     return _profile(current_user)
+
+
+@router.post("/me/push-token", status_code=status.HTTP_204_NO_CONTENT)
+async def set_push_token(
+    body: PushTokenRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Register (or clear) the Expo push token for the user's device."""
+    current_user.expo_push_token = body.token
+    await session.commit()
+    return None
 
 
 @router.post("/me/consent", response_model=ProfileResponse)

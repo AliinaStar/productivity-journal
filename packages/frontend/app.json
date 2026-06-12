@@ -23,7 +23,8 @@
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.litopys.app"
+      "package": "com.litopys.app",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro",
@@ -33,7 +34,8 @@
       "expo-router",
       "@react-native-community/datetimepicker",
       "expo-sqlite",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-notifications"
     ],
     "scheme": "litopys",
     "extra": {

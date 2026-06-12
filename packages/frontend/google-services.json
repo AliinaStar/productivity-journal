@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "994555358740",
+    "project_id": "litopys-909e6",
+    "storage_bucket": "litopys-909e6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:994555358740:android:3bc46f2cc6c77525d80101",
+        "android_client_info": {
+          "package_name": "com.litopys.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD_JOEE3mmtEGW6e62STwrD1mQhiZdWCP0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

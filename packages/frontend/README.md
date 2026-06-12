@@ -67,9 +67,9 @@ app/
 │   ├── goal/
 │   │   └── [id].tsx       # Goal detail + full entry history
 │   ├── summary/
-│   │   ├── week/index.tsx   # Weekly report view + generate button
-│   │   ├── month/index.tsx  # Monthly report view + generate button
-│   │   └── year/index.tsx   # Yearly report view + generate button
+│   │   ├── week/index.tsx   # Weekly report view
+│   │   ├── month/index.tsx  # Monthly report view
+│   │   └── year/index.tsx   # Yearly report view
 │   └── settings.tsx       # Language toggle, logout, sync controls
 ```
 
@@ -83,8 +83,6 @@ User action
     ▼
 SQLite (local)
     │
-    ├─ [auto] on report generate  ──► push unsynced goals & entries
-    │                                          │
     └─ [manual] sync button       ──► push unsynced goals & entries
                                                │
                                          backend stores,
@@ -99,7 +97,6 @@ SQLite (local)
 | `pushChanges()` | Same as sync without updating the sync timestamp |
 | `pullGoals()` | Fetch all goals from backend and upsert locally |
 | `pullEntries()` | Fetch all entries from backend and upsert locally |
-| `generateReport(period, ...)` | Push changes, then request report generation |
 | `pullReport(period, ...)` | Fetch an existing report and cache it locally |
 | `syncReports(period)` | Pull all reports of a period type not cached locally |
 

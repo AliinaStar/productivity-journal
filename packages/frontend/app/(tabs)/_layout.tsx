@@ -1,9 +1,17 @@
+import { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { setupNotifications } from '@/utils/notifications';
 
 export default function TabsLayout() {
   const { t } = useTranslation();
+
+  // The tabs area only mounts for authenticated users, so the push token
+  // registration call is guaranteed to have a session.
+  useEffect(() => {
+    setupNotifications();
+  }, []);
   return (
     <Tabs
       screenOptions={{
