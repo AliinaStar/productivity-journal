@@ -36,9 +36,25 @@ _semaphore = asyncio.Semaphore(10)
 
 
 async def _generate_one(user_id: int, period: str, date_dict: DateDict) -> None:
-    """Generate and persist a single report, guarded by ``_semaphore``."""
+    """Generate and persist a single report, guarded by ``_semaphore``.
+
+    Idempotent: does nothing when the report already exists (so cron retries
+    and the startup catch-up can safely overlap) or when the user has no
+    entries in the period (no LLM call for inactive users).
+    """
     async with _semaphore:
         try:
+            period_start, period_end = _period_dates(period, date_dict)
+            if await db.report_exists(user_id, period, period_start):
+                return
+
+            if await db.count_entries(period, date_dict, user_id) == 0:
+                logger.info(
+                    "Skipping report for user=%s period=%s date=%s: no entries",
+                    user_id, period, date_dict,
+                )
+                return
+
             state = await pipeline.ainvoke({
                 "period": period,
                 "date": date_dict,
@@ -48,7 +64,6 @@ async def _generate_one(user_id: int, period: str, date_dict: DateDict) -> None:
                 logger.warning("No report generated for user=%s period=%s date=%s", user_id, period, date_dict)
                 return
 
-            period_start, period_end = _period_dates(period, date_dict)
             await db.save_report(
                 user_id=user_id,
                 period=period,
@@ -128,12 +143,50 @@ async def cleanup_auth_artifacts() -> None:
         await session.commit()
 
 
+async def catch_up_missed_reports() -> None:
+    """Backfill reports for the most recent completed week, month, and year.
+
+    Runs once on startup. If the server was down when a cron fired, that
+    period's reports would otherwise be lost forever. ``_generate_one`` skips
+    users whose report already exists or who had no entries, so on a normal
+    startup this costs one cheap query per user and generates nothing.
+
+    Ordered week → month → year so a freshly backfilled sub-period can feed
+    the higher-level summary.
+    """
+    today = date.today()
+
+    # Most recent completed ISO week = the week containing last Sunday.
+    last_sunday = today - timedelta(days=today.isoweekday())
+    iso = last_sunday.isocalendar()
+    await generate_reports_for_period("week", {"year": iso.year, "week": iso.week})
+
+    last_month_day = today.replace(day=1) - timedelta(days=1)
+    await generate_reports_for_period(
+        "month", {"year": last_month_day.year, "month": last_month_day.month}
+    )
+
+    await generate_reports_for_period("year", {"year": today.year - 1})
+
+
+# If the server is down when a cron fires, still run the job up to 12 hours
+# late instead of silently dropping it. Anything older is handled by the
+# startup catch-up job.
+_MISFIRE_GRACE = 12 * 3600
+
+
 def register_jobs() -> None:
     """Register all cron jobs on the module-level ``scheduler`` instance.
 
     Call once during application startup (before ``scheduler.start()``).
     """
-    scheduler.add_job(_run_weekly,  CronTrigger(day_of_week="mon", hour=0, minute=1))
-    scheduler.add_job(_run_monthly, CronTrigger(day=1,              hour=0, minute=1))
-    scheduler.add_job(_run_yearly,  CronTrigger(month=1,  day=1,    hour=0, minute=1))
-    scheduler.add_job(cleanup_auth_artifacts, CronTrigger(hour=3, minute=0))
+    scheduler.add_job(_run_weekly,  CronTrigger(day_of_week="mon", hour=0, minute=1),
+                      misfire_grace_time=_MISFIRE_GRACE)
+    scheduler.add_job(_run_monthly, CronTrigger(day=1,              hour=0, minute=1),
+                      misfire_grace_time=_MISFIRE_GRACE)
+    scheduler.add_job(_run_yearly,  CronTrigger(month=1,  day=1,    hour=0, minute=1),
+                      misfire_grace_time=_MISFIRE_GRACE)
+    scheduler.add_job(cleanup_auth_artifacts, CronTrigger(hour=3, minute=0),
+                      misfire_grace_time=3600)
+    # One-off: backfill anything missed while the server was down.
+    scheduler.add_job(catch_up_missed_reports)

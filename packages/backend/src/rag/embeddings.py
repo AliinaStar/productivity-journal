@@ -14,6 +14,13 @@ embed_executor = ThreadPoolExecutor(max_workers=1)
 
 @lru_cache(maxsize=1)
 def get_embedding_model() -> SentenceTransformer:
+    """Load and warm up the model.
+
+    Must only ever be called from the ``embed_executor`` thread (see
+    ``embed_text`` / ``preload_embedding_model``): loading takes tens of
+    seconds and would freeze the event loop, and the warmup must seed the
+    rope cache in the thread that will run all encode() calls.
+    """
     model = SentenceTransformer(
         "Alibaba-NLP/gte-multilingual-base",
         trust_remote_code=True,
@@ -34,17 +41,29 @@ def get_embedding_model() -> SentenceTransformer:
             n = module.position_ids.shape[0]
             module.register_buffer("position_ids", torch.arange(n), persistent=False)
 
-    # Warmup must run in the executor thread to seed the rope cache there.
-    future = embed_executor.submit(model.encode, "warmup", normalize_embeddings=True)
-    future.result()
+    # Warmup directly in the calling thread — which is the embed_executor
+    # thread — to seed the rope cache where all encode() calls will run.
+    # (Do NOT submit to embed_executor here: with max_workers=1 a call from
+    # inside the executor thread would deadlock waiting on itself.)
+    model.encode("warmup", normalize_embeddings=True)
     return model
+
+
+async def preload_embedding_model() -> None:
+    """Load the model at startup so no user request ever pays the load cost.
+
+    Called from the FastAPI lifespan before the app starts serving traffic.
+    Runs in the embed_executor thread, keeping the event loop free.
+    """
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(embed_executor, get_embedding_model)
 
 
 async def embed_text(text: str) -> list[float]:
     """Embed *text* asynchronously, always using the single embed_executor thread."""
-    model = get_embedding_model()
     loop = asyncio.get_event_loop()
     vector = await loop.run_in_executor(
-        embed_executor, lambda: model.encode(text, normalize_embeddings=True)
+        embed_executor,
+        lambda: get_embedding_model().encode(text, normalize_embeddings=True),
     )
     return vector.tolist()

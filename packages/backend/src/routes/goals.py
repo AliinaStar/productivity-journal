@@ -9,10 +9,10 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.dependencies import Pagination, get_current_user, get_pagination
+from src.core.dependencies import Pagination, get_current_user, get_db, get_pagination
 from src.db.models import Goal, User
-from src.db.session import get_async_sessionmaker
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
@@ -75,17 +75,16 @@ def _to_response(goal: Goal) -> GoalResponse:
 async def list_goals(
     page: Pagination = Depends(get_pagination),
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
 ) -> list[GoalResponse]:
-    session_factory = get_async_sessionmaker()
-    async with session_factory() as session:
-        result = await session.execute(
-            select(Goal)
-            .where(Goal.user_id == current_user.id)
-            .order_by(Goal.created_at.desc(), Goal.id.desc())
-            .limit(page.limit)
-            .offset(page.offset)
-        )
-        goals = result.scalars().all()
+    result = await session.execute(
+        select(Goal)
+        .where(Goal.user_id == current_user.id)
+        .order_by(Goal.created_at.desc(), Goal.id.desc())
+        .limit(page.limit)
+        .offset(page.offset)
+    )
+    goals = result.scalars().all()
     return [_to_response(g) for g in goals]
 
 
@@ -93,21 +92,20 @@ async def list_goals(
 async def create_goal(
     body: CreateGoalRequest,
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
 ) -> GoalResponse:
     """Create a new goal for the current user."""
-    session_factory = get_async_sessionmaker()
-    async with session_factory() as session:
-        goal = Goal(
-            user_id=current_user.id,
-            title=body.title,
-            description=body.description,
-            deadline=date.fromisoformat(body.deadline) if body.deadline else None,
-            created_at=date.fromisoformat(body.created_at),
-            status=body.status,
-        )
-        session.add(goal)
-        await session.commit()
-        await session.refresh(goal)
+    goal = Goal(
+        user_id=current_user.id,
+        title=body.title,
+        description=body.description,
+        deadline=date.fromisoformat(body.deadline) if body.deadline else None,
+        created_at=date.fromisoformat(body.created_at),
+        status=body.status,
+    )
+    session.add(goal)
+    await session.commit()
+    await session.refresh(goal)
     return _to_response(goal)
 
 
@@ -116,30 +114,29 @@ async def update_goal(
     goal_id: int,
     body: UpdateGoalRequest,
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
 ) -> GoalResponse:
     """Partially update a goal owned by the current user.
 
     Raises:
         404: Goal not found or does not belong to the current user.
     """
-    session_factory = get_async_sessionmaker()
-    async with session_factory() as session:
-        result = await session.execute(
-            select(Goal).where(Goal.id == goal_id, Goal.user_id == current_user.id)
-        )
-        goal = result.scalars().first()
-        if goal is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found.")
+    result = await session.execute(
+        select(Goal).where(Goal.id == goal_id, Goal.user_id == current_user.id)
+    )
+    goal = result.scalars().first()
+    if goal is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found.")
 
-        if body.title is not None:
-            goal.title = body.title
-        if body.description is not None:
-            goal.description = body.description
-        if body.deadline is not None:
-            goal.deadline = date.fromisoformat(body.deadline)
-        if body.status is not None:
-            goal.status = body.status
+    if body.title is not None:
+        goal.title = body.title
+    if body.description is not None:
+        goal.description = body.description
+    if body.deadline is not None:
+        goal.deadline = date.fromisoformat(body.deadline)
+    if body.status is not None:
+        goal.status = body.status
 
-        await session.commit()
-        await session.refresh(goal)
+    await session.commit()
+    await session.refresh(goal)
     return _to_response(goal)

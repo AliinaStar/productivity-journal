@@ -3,6 +3,8 @@
 Single responsibility: send a one-time login code to the user's email.
 """
 
+import asyncio
+
 import resend
 
 from src.core.settings import get_settings
@@ -31,6 +33,8 @@ async def send_login_code(email: str, code: str) -> None:
         ),
     }
 
-    response = resend.Emails.send(params)
+    # The resend SDK is synchronous — run it in a worker thread so the
+    # HTTP round-trip doesn't block the event loop for other requests.
+    response = await asyncio.to_thread(resend.Emails.send, params)
     if not response.get("id"):
         raise RuntimeError(f"Resend failed: {response}")

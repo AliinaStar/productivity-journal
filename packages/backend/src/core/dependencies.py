@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.security import decode_token
 from src.db.models import User
-from src.db.session import get_async_sessionmaker
 
 _bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -42,15 +41,21 @@ async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+    session: AsyncSession = Depends(get_db),
 ) -> User:
     """Resolve the current user from the ``Authorization: Bearer <token>`` header.
 
     The access token is cryptographically verified (signature + expiry + type)
     before the user id is trusted, so it cannot be forged or impersonated.
 
+    Uses the shared per-request session from ``get_db`` — FastAPI caches
+    dependencies within a request, so routes that also depend on ``get_db``
+    get the same session (one DB session per request).
+
     Raises:
-        401: If the token is missing, malformed, expired, or not an access token.
-        404: If the user encoded in a valid token no longer exists.
+        401: If the token is missing, malformed, expired, not an access token,
+             or the user encoded in it no longer exists (e.g. account deleted) —
+             from the client's perspective the session is simply no longer valid.
     """
     try:
         user_id = decode_token(credentials.credentials, expected_type="access")
@@ -61,13 +66,12 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    session_factory = get_async_sessionmaker()
-    async with session_factory() as session:
-        user = await session.get(User, user_id)
+    user = await session.get(User, user_id)
 
     if user is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     return user

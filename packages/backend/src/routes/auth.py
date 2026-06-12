@@ -15,10 +15,12 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.dependencies import get_db
 from src.core.email import send_login_code
 from src.core.logging import get_logger
 from src.core.ratelimit import limiter
@@ -29,7 +31,6 @@ from src.core.security import (
 )
 from src.core.settings import get_settings
 from src.db.models import AuthCode, RefreshToken, User
-from src.db.session import get_async_sessionmaker
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 log = get_logger(__name__)
@@ -113,34 +114,36 @@ async def _get_or_create_user(session, email: str) -> tuple[User, bool]:
 
 @router.post("/send-code", response_model=SendCodeResponse)
 @limiter.limit("5/hour")
-async def send_code(request: Request, body: SendCodeRequest) -> SendCodeResponse:
+async def send_code(
+    request: Request,
+    body: SendCodeRequest,
+    session: AsyncSession = Depends(get_db),
+) -> SendCodeResponse:
     """Generate a 6-digit OTP and email it to the user.
 
     Only the SHA-256 hash of the code is stored. Invalidates any previously
     unused codes for the same email. Always returns 200 regardless of whether
     the email is registered (security: do not reveal account existence).
     """
-    session_factory = get_async_sessionmaker()
     code = _generate_code()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
-    async with session_factory() as session:
-        # Invalidate previous unused codes for this email
-        old_codes = await session.execute(
-            select(AuthCode)
-            .where(AuthCode.email == body.email)
-            .where(AuthCode.used.is_(False))
-        )
-        for old in old_codes.scalars().all():
-            old.used = True
+    # Invalidate previous unused codes for this email
+    old_codes = await session.execute(
+        select(AuthCode)
+        .where(AuthCode.email == body.email)
+        .where(AuthCode.used.is_(False))
+    )
+    for old in old_codes.scalars().all():
+        old.used = True
 
-        session.add(AuthCode(
-            email=body.email,
-            code_hash=_hash_code(code),
-            expires_at=expires_at,
-            used=False,
-        ))
-        await session.commit()
+    session.add(AuthCode(
+        email=body.email,
+        code_hash=_hash_code(code),
+        expires_at=expires_at,
+        used=False,
+    ))
+    await session.commit()
 
     await send_login_code(email=body.email, code=code)
     return SendCodeResponse(detail="Code sent to your email.")
@@ -148,7 +151,11 @@ async def send_code(request: Request, body: SendCodeRequest) -> SendCodeResponse
 
 @router.post("/verify-code", response_model=TokenResponse)
 @limiter.limit("10/hour")
-async def verify_code(request: Request, body: VerifyCodeRequest) -> TokenResponse:
+async def verify_code(
+    request: Request,
+    body: VerifyCodeRequest,
+    session: AsyncSession = Depends(get_db),
+) -> TokenResponse:
     """Verify OTP and return JWT tokens. Creates user on first login.
 
     Each unused code tracks a failed-attempt counter; once it exceeds
@@ -157,53 +164,55 @@ async def verify_code(request: Request, body: VerifyCodeRequest) -> TokenRespons
     Raises:
         400: Invalid, expired, already used, or too-many-attempts code.
     """
-    session_factory = get_async_sessionmaker()
     now = datetime.now(timezone.utc)
     max_attempts = get_settings().otp_max_attempts
 
-    async with session_factory() as session:
-        # Latest unused code for this email (regardless of the submitted value),
-        # so a wrong guess increments that code's attempt counter.
-        result = await session.execute(
-            select(AuthCode)
-            .where(AuthCode.email == body.email)
-            .where(AuthCode.used.is_(False))
-            .order_by(AuthCode.expires_at.desc())
-        )
-        auth_code = result.scalars().first()
+    # Latest unused code for this email (regardless of the submitted value),
+    # so a wrong guess increments that code's attempt counter.
+    result = await session.execute(
+        select(AuthCode)
+        .where(AuthCode.email == body.email)
+        .where(AuthCode.used.is_(False))
+        .order_by(AuthCode.expires_at.desc())
+    )
+    auth_code = result.scalars().first()
 
-        invalid = HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired code.",
-        )
+    invalid = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid or expired code.",
+    )
 
-        if auth_code is None or auth_code.expires_at.replace(tzinfo=timezone.utc) < now:
-            raise invalid
+    if auth_code is None or auth_code.expires_at.replace(tzinfo=timezone.utc) < now:
+        raise invalid
 
-        if auth_code.attempts >= max_attempts:
-            auth_code.used = True
-            await session.commit()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Too many attempts. Request a new code.",
-            )
-
-        if not secrets.compare_digest(auth_code.code_hash, _hash_code(body.code)):
-            auth_code.attempts += 1
-            await session.commit()
-            raise invalid
-
+    if auth_code.attempts >= max_attempts:
         auth_code.used = True
-        user, is_new = await _get_or_create_user(session, body.email)
-        tokens = await _issue_tokens(session, user, is_new)
         await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Too many attempts. Request a new code.",
+        )
+
+    if not secrets.compare_digest(auth_code.code_hash, _hash_code(body.code)):
+        auth_code.attempts += 1
+        await session.commit()
+        raise invalid
+
+    auth_code.used = True
+    user, is_new = await _get_or_create_user(session, body.email)
+    tokens = await _issue_tokens(session, user, is_new)
+    await session.commit()
 
     return tokens
 
 
 @router.post("/refresh", response_model=RefreshResponse)
 @limiter.limit("60/hour")
-async def refresh(request: Request, body: RefreshRequest) -> RefreshResponse:
+async def refresh(
+    request: Request,
+    body: RefreshRequest,
+    session: AsyncSession = Depends(get_db),
+) -> RefreshResponse:
     """Exchange a refresh token for a fresh access + refresh token pair.
 
     The presented refresh token is rotated: it is revoked and replaced with a
@@ -232,38 +241,39 @@ async def refresh(request: Request, body: RefreshRequest) -> RefreshResponse:
     if jti is None:
         raise unauthorized
 
-    session_factory = get_async_sessionmaker()
     now = datetime.now(timezone.utc)
-    async with session_factory() as session:
-        row = (await session.execute(
-            select(RefreshToken).where(RefreshToken.jti == jti)
-        )).scalars().first()
+    row = (await session.execute(
+        select(RefreshToken).where(RefreshToken.jti == jti)
+    )).scalars().first()
 
-        if row is None or row.expires_at.replace(tzinfo=timezone.utc) < now:
-            raise unauthorized
+    if row is None or row.expires_at.replace(tzinfo=timezone.utc) < now:
+        raise unauthorized
 
-        if row.revoked:
-            # This token was already rotated away or logged out. A second use
-            # means the stored token leaked — burn the whole family.
-            await session.execute(
-                update(RefreshToken)
-                .where(RefreshToken.user_id == row.user_id)
-                .values(revoked=True)
-            )
-            await session.commit()
-            raise unauthorized
-
-        # Rotate: burn the presented token and mint a fresh pair.
-        row.revoked = True
-        new_access = create_access_token(row.user_id)
-        new_refresh = _new_refresh_token(session, row.user_id)
+    if row.revoked:
+        # This token was already rotated away or logged out. A second use
+        # means the stored token leaked — burn the whole family.
+        await session.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == row.user_id)
+            .values(revoked=True)
+        )
         await session.commit()
+        raise unauthorized
+
+    # Rotate: burn the presented token and mint a fresh pair.
+    row.revoked = True
+    new_access = create_access_token(row.user_id)
+    new_refresh = _new_refresh_token(session, row.user_id)
+    await session.commit()
 
     return RefreshResponse(access_token=new_access, refresh_token=new_refresh)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(body: LogoutRequest) -> None:
+async def logout(
+    body: LogoutRequest,
+    session: AsyncSession = Depends(get_db),
+) -> None:
     """Revoke a refresh token so it can no longer be used.
 
     Idempotent: an unknown or already-revoked token is treated as success
@@ -278,17 +288,18 @@ async def logout(body: LogoutRequest) -> None:
     if jti is None:
         return None
 
-    session_factory = get_async_sessionmaker()
-    async with session_factory() as session:
-        await session.execute(
-            update(RefreshToken).where(RefreshToken.jti == jti).values(revoked=True)
-        )
-        await session.commit()
+    await session.execute(
+        update(RefreshToken).where(RefreshToken.jti == jti).values(revoked=True)
+    )
+    await session.commit()
     return None
 
 
 @router.post("/dev-login", response_model=TokenResponse)
-async def dev_login(body: SendCodeRequest) -> TokenResponse:
+async def dev_login(
+    body: SendCodeRequest,
+    session: AsyncSession = Depends(get_db),
+) -> TokenResponse:
     """Skip OTP and return tokens directly. Only available in development.
 
     Raises:
@@ -297,10 +308,8 @@ async def dev_login(body: SendCodeRequest) -> TokenResponse:
     if get_settings().app_env != "development":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not available in production.")
 
-    session_factory = get_async_sessionmaker()
-    async with session_factory() as session:
-        user, is_new = await _get_or_create_user(session, body.email)
-        tokens = await _issue_tokens(session, user, is_new)
-        await session.commit()
+    user, is_new = await _get_or_create_user(session, body.email)
+    tokens = await _issue_tokens(session, user, is_new)
+    await session.commit()
 
     return tokens

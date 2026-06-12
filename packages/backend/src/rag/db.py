@@ -51,11 +51,50 @@ def build_where_clause(period: str, date: DateDict, user_id: int):
             & (extract("year", Entry.date_note) == date["year"])
         )
     else:
+        # 'isoyear', not 'year': ISO week 1 can start in late December
+        # (e.g. 2025-12-29 belongs to ISO week 1 of 2026), so the year must
+        # follow the same ISO week-numbering as extract('week') does.
         return (
             user_filter
             & (extract("week", Entry.date_note) == date["week"])
-            & (extract("year", Entry.date_note) == date["year"])
+            & (extract("isoyear", Entry.date_note) == date["year"])
         )
+
+
+async def report_exists(user_id: int, period: str, period_start: date_type) -> bool:
+    """True if a report already exists for (user, period, period_start).
+
+    Lets the scheduler skip regeneration: cron retries and the startup
+    catch-up job are idempotent thanks to this check (plus the DB-level
+    unique constraint as a safety net).
+    """
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        result = await session.execute(
+            select(Report.id)
+            .where(Report.user_id == user_id)
+            .where(Report.period == period)
+            .where(Report.period_start == period_start)
+            .limit(1)
+        )
+        return result.first() is not None
+
+
+async def count_entries(period: str, date: DateDict, user_id: int) -> int:
+    """Count the user's entries inside a period without loading them.
+
+    Used by the scheduler to skip report generation (and the LLM call)
+    entirely for users who wrote nothing during the period.
+    """
+    session_factory = get_async_sessionmaker()
+    where_clause = build_where_clause(period, date, user_id)
+    async with session_factory() as session:
+        result = await session.execute(
+            select(func.count(Entry.id))
+            .join(Goal, Entry.goal_id == Goal.id)
+            .where(where_clause)
+        )
+        return int(result.scalar_one())
 
 
 async def query_entries(period: str, date: DateDict, user_id: int) -> dict:

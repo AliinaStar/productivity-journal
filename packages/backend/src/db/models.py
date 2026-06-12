@@ -12,6 +12,7 @@ from sqlalchemy import (
     Float,
     Boolean,
     Index,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -63,6 +64,14 @@ class Goal(Base):
 
 class Report(Base):
     __tablename__ = "report"
+    __table_args__ = (
+        # One report per user per period — protects against duplicate rows when
+        # a scheduler run is retried or the startup catch-up overlaps a cron job.
+        UniqueConstraint(
+            "user_id", "period", "period_start",
+            name="uq_report_user_period_start",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))

@@ -18,8 +18,19 @@ def test_non_dev_env_requires_jwt_secret():
 
 
 def test_production_with_secret_ok():
-    s = AppSettings(app_env="production", jwt_secret="x" * 40, _env_file=None)
+    s = AppSettings(
+        app_env="production",
+        jwt_secret="x" * 40,
+        postgres_password="strong-db-password",
+        _env_file=None,
+    )
     assert s.app_env == "production"
+
+
+def test_production_rejects_default_db_password():
+    # The well-known default 'postgres' password must not survive into production.
+    with pytest.raises(ValidationError):
+        AppSettings(app_env="production", jwt_secret="x" * 40, _env_file=None)
 
 
 def test_development_allows_empty_secret():

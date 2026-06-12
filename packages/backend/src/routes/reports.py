@@ -11,13 +11,13 @@ Endpoints:
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.dependencies import Pagination, get_current_user, get_pagination
+from src.core.dependencies import Pagination, get_current_user, get_db, get_pagination
 from src.db.models import Report, User
-from src.db.session import get_async_sessionmaker
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -53,19 +53,18 @@ async def list_reports(
     period: Literal["week", "month", "year"] = Query(...),
     page: Pagination = Depends(get_pagination),
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
 ) -> list[ReportResponse]:
     """Return stored reports for the current user for a given period type."""
-    session_factory = get_async_sessionmaker()
-    async with session_factory() as session:
-        result = await session.execute(
-            select(Report)
-            .where(Report.user_id == current_user.id)
-            .where(Report.period == period)
-            .order_by(Report.period_start.desc())
-            .limit(page.limit)
-            .offset(page.offset)
-        )
-        reports = result.scalars().all()
+    result = await session.execute(
+        select(Report)
+        .where(Report.user_id == current_user.id)
+        .where(Report.period == period)
+        .order_by(Report.period_start.desc())
+        .limit(page.limit)
+        .offset(page.offset)
+    )
+    reports = result.scalars().all()
     return [_to_response(r) for r in reports]
 
 
@@ -74,20 +73,25 @@ async def get_report(
     period: Literal["week", "month", "year"] = Query(...),
     period_start: str = Query(..., description="ISO date, e.g. 2025-04-07"),
     current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
 ) -> ReportResponse | None:
     """Return a stored report for the current user, or ``null`` if not found.
 
     Returns HTTP 200 with ``null`` body when the report does not exist yet.
     """
-    start = date.fromisoformat(period_start)
-    session_factory = get_async_sessionmaker()
-    async with session_factory() as session:
-        result = await session.execute(
-            select(Report)
-            .where(Report.user_id == current_user.id)
-            .where(Report.period == period)
-            .where(Report.period_start == start)
+    try:
+        start = date.fromisoformat(period_start)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="period_start must be an ISO date (YYYY-MM-DD).",
         )
-        report = result.scalars().first()
+    result = await session.execute(
+        select(Report)
+        .where(Report.user_id == current_user.id)
+        .where(Report.period == period)
+        .where(Report.period_start == start)
+    )
+    report = result.scalars().first()
 
     return _to_response(report) if report else None

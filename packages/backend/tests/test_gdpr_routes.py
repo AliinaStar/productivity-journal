@@ -52,8 +52,8 @@ def test_delete_account_removes_everything(client, db, make_user):
     uid = user["user_id"]
     assert db.execute('SELECT count(*) FROM "user" WHERE id = %s', (uid,)).fetchone()[0] == 0
     assert db.execute("SELECT count(*) FROM goal WHERE user_id = %s", (uid,)).fetchone()[0] == 0
-    # The access token now resolves to a missing user.
-    assert client.get("/users/me", headers=user["headers"]).status_code == 404
+    # The access token now resolves to a missing user → session is invalid (401).
+    assert client.get("/users/me", headers=user["headers"]).status_code == 401
 
 
 def test_delete_account_requires_auth(client):

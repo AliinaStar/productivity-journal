@@ -12,25 +12,17 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "resend>=2.0.0",
     "langchain>=1.2.10",
-    "langchain-community>=0.4.1",
     "langchain-huggingface>=1.2.0",
     "langchain-openai>=1.1.10",
     "langfuse>=3.14.5",
     "langgraph>=1.0.9",
-    "nest-asyncio>=1.6.0",
     "numpy>=2.4.2",
-    "pandas>=3.0.1",
     "pgvector>=0.4.2",
-    "psycopg2-binary>=2.9.11",
     "psycopg[binary]>=3.3.3",
     "python-dotenv>=1.2.1",
     "sentence-transformers>=5.2.3",
     "torch>=1.11.0,<2.11.0",
-    "ragas>=0.2",
     "sqlalchemy>=2.0.46",
-    "seaborn>=0.13.2",
-    "matplotlib>=3.10.8",
-    "scipy==1.15.3",
     "pyjwt>=2.13.0",
     "slowapi>=0.1.9",
     "structlog>=25.5.0",
@@ -42,6 +34,17 @@ dev = [
     "ipython>=9.10.0",
     "jupyter>=1.1.1",
     "pytest>=9.0.2",
+]
+# Notebook / evaluation-only packages: never installed in the production image
+# (Dockerfile runs `uv sync --no-dev`). Install locally with `uv sync --group eval`.
+eval = [
+    "langchain-community>=0.4.1",
+    "matplotlib>=3.10.8",
+    "nest-asyncio>=1.6.0",
+    "pandas>=3.0.1",
+    "ragas>=0.2",
+    "scipy==1.15.3",
+    "seaborn>=0.13.2",
 ]
 
 [build-system]

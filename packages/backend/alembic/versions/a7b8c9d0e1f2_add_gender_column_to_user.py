@@ -26,7 +26,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     gender_enum = sa.Enum("male", "female", "unspecified", name="gender")
     gender_enum.create(op.get_bind(), checkfirst=True)
-    op.add_column("user", sa.Column("gender", gender_enum, nullable=True))
+    # IF NOT EXISTS: databases created during development may already have the
+    # column (e.g. via metadata.create_all) while alembic_version lags behind.
+    op.execute('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS gender gender')
 
 
 def downgrade() -> None:

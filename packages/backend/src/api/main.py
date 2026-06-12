@@ -21,6 +21,7 @@ from src.core.logging import get_logger, setup_logging
 from src.core.ratelimit import limiter
 from src.core.settings import get_settings
 from src.db.session import get_async_sessionmaker
+from src.rag.embeddings import preload_embedding_model
 from src.rag.scheduler import register_jobs, scheduler
 from src.routes.auth import router as auth_router
 from src.routes.entries import router as entries_router
@@ -37,8 +38,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Start the APScheduler on startup and shut it down on teardown.
 
     Also registers all cron jobs before starting so ``register_jobs``
-    is called exactly once per process lifetime.
+    is called exactly once per process lifetime, and preloads the embedding
+    model so the first user request never pays the multi-second load cost.
     """
+    log.info("preloading_embedding_model")
+    await preload_embedding_model()
+    log.info("embedding_model_ready")
     register_jobs()
     scheduler.start()
     yield

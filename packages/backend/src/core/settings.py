@@ -23,17 +23,24 @@ class AppSettings(BaseSettings):
 
     @model_validator(mode="after")
     def _require_secrets_outside_dev(self) -> "AppSettings":
-        """Fail-closed: only 'development' may run without an explicit JWT secret.
+        """Fail-closed: only 'development' may run with default/empty secrets.
 
         Any other value (production, staging, …) must set JWT_SECRET — otherwise
         tokens would be signed with the public insecure dev fallback and could be
-        forged for any user.
+        forged for any user. Likewise the well-known default Postgres password
+        is rejected so a misconfigured deploy fails at startup, not at breach.
         """
-        if self.app_env != "development" and not self.jwt_secret:
-            raise ValueError(
-                f"JWT_SECRET must be set when APP_ENV={self.app_env!r}. "
-                "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(64))'"
-            )
+        if self.app_env != "development":
+            if not self.jwt_secret:
+                raise ValueError(
+                    f"JWT_SECRET must be set when APP_ENV={self.app_env!r}. "
+                    "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(64))'"
+                )
+            if self.postgres_password == "postgres":
+                raise ValueError(
+                    f"POSTGRES_PASSWORD must be changed from the default when "
+                    f"APP_ENV={self.app_env!r}."
+                )
         return self
 
     @computed_field  # type: ignore[prop-decorator]
