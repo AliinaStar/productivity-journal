@@ -86,7 +86,7 @@ export async function setupNotifications(): Promise<void> {
 }
 
 /** Schedule the daily local reminder, replacing any previously scheduled one. */
-async function scheduleDailyReminder(): Promise<void> {
+export async function scheduleDailyReminder(): Promise<void> {
   const { hour, minute } = await getReminderTime();
   // The reminder is the only local notification the app schedules, so a full
   // cancel keeps exactly one copy (and refreshes the text after a language change).

@@ -3,12 +3,14 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { apiFetch } from '@/api-client/client';
+import { APP_LANGUAGES, APP_LANGUAGE_LABELS, AppLanguage, setAppLanguage } from '@/utils/locale';
+import { REPORT_LANGUAGES } from '@/utils/reportLanguages';
+import { LanguageSelect } from '@/components/language-select';
 
-const LANGUAGES = ['English', 'Ukrainian', 'Polish', 'German', 'French', 'Spanish'];
 const GENDER_KEYS = ['female', 'male', 'unspecified'] as const;
 
 export default function SettingsScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [name, setName] = useState('');
   const [language, setLanguage] = useState('Ukrainian');
   const [gender, setGender] = useState('unspecified');
@@ -64,14 +66,17 @@ export default function SettingsScreen() {
       <Text style={s.label}>{t('settings.nameLabel')}</Text>
       <TextInput style={s.input} placeholder={t('settings.namePlaceholder')} placeholderTextColor="#B4B2A9" value={name} onChangeText={setName} autoCapitalize="words" />
 
-      <Text style={s.label}>{t('settings.languageLabel')}</Text>
+      <Text style={s.label}>{t('settings.appLanguageLabel')}</Text>
       <View style={s.chips}>
-        {LANGUAGES.map(lang => (
-          <TouchableOpacity key={lang} style={[s.chip, language === lang && s.chipSelected]} onPress={() => setLanguage(lang)} activeOpacity={0.7}>
-            <Text style={[s.chipText, language === lang && s.chipTextSelected]}>{lang}</Text>
+        {APP_LANGUAGES.map(lng => (
+          <TouchableOpacity key={lng} style={[s.chip, i18n.language === lng && s.chipSelected]} onPress={() => setAppLanguage(lng as AppLanguage)} activeOpacity={0.7}>
+            <Text style={[s.chipText, i18n.language === lng && s.chipTextSelected]}>{APP_LANGUAGE_LABELS[lng]}</Text>
           </TouchableOpacity>
         ))}
       </View>
+
+      <Text style={s.label}>{t('settings.languageLabel')}</Text>
+      <LanguageSelect value={language} options={REPORT_LANGUAGES} onChange={setLanguage} />
 
       <Text style={s.label}>{t('settings.genderLabel')}</Text>
       <View style={s.chips}>

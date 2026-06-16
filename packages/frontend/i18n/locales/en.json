@@ -87,6 +87,7 @@
     "sub": "This helps us personalise your reports",
     "nameLabel": "What's your name?",
     "namePlaceholder": "Name",
+    "appLanguageLabel": "App language",
     "languageLabel": "Report language",
     "genderLabel": "Gender",
     "continue": "Continue",
@@ -105,6 +106,7 @@
     "title": "Settings",
     "nameLabel": "Name",
     "namePlaceholder": "Name",
+    "appLanguageLabel": "App language",
     "languageLabel": "Report language",
     "genderLabel": "Gender",
     "save": "Save",
@@ -154,5 +156,9 @@
     "newGoal": "New goal",
     "addNote": "Add note",
     "notesList": "Notes"
+  },
+  "languageSelect": {
+    "searchPlaceholder": "Search language…",
+    "empty": "No matches"
   }
 }

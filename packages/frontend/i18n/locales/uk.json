@@ -93,6 +93,7 @@
     "sub": "Це допоможе нам персоналізувати звіти",
     "nameLabel": "Як тебе звати?",
     "namePlaceholder": "Ім'я",
+    "appLanguageLabel": "Мова застосунку",
     "languageLabel": "Мова звітів",
     "genderLabel": "Стать",
     "continue": "Продовжити",
@@ -111,6 +112,7 @@
     "title": "Налаштування",
     "nameLabel": "Ім'я",
     "namePlaceholder": "Ім'я",
+    "appLanguageLabel": "Мова застосунку",
     "languageLabel": "Мова звітів",
     "genderLabel": "Стать",
     "save": "Зберегти",
@@ -161,5 +163,9 @@
     "newGoal": "Нова ціль",
     "addNote": "Додати нотатку",
     "notesList": "Нотатки"
+  },
+  "languageSelect": {
+    "searchPlaceholder": "Пошук мови…",
+    "empty": "Нічого не знайдено"
   }
 }
