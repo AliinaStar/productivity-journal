@@ -20,7 +20,7 @@ export default function HomeScreen() {
   const { t } = useTranslation();
   const goals = useGoals();
   const entries = useEntries();
-  const { sync, pullGoals, syncing } = useSync();
+  const { pullGoals, pushChanges } = useSync();
   const [items, setItems] = useState<Goal[]>([]);
   const [weekCount, setWeekCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -36,12 +36,15 @@ export default function HomeScreen() {
     setLoading(false);
   }
 
-  useFocusEffect(useCallback(() => { pullGoals().then(load); }, []));
-
-  async function handleSync() {
-    await sync();
-    await load();
-  }
+  // On focus: push local changes, pull fresh state, then refresh the list.
+  // This replaces the manual sync button — sync now happens automatically.
+  useFocusEffect(useCallback(() => {
+    (async () => {
+      try { await pushChanges(); } catch {}
+      try { await pullGoals(); } catch {}
+      await load();
+    })();
+  }, []));
 
   return (
     <View style={s.container}>
@@ -51,9 +54,6 @@ export default function HomeScreen() {
             <Text style={s.greeting}>{todayLabel()}</Text>
             <Text style={s.headerTitle}>{t('home.greetDay')}</Text>
           </View>
-          <Pressable onPress={handleSync} disabled={syncing} style={s.syncBtn}>
-            <Text style={s.syncText}>{syncing ? '…' : '↻'}</Text>
-          </Pressable>
         </View>
         <View style={s.statsRow}>
           <View style={s.statCard}>
@@ -118,8 +118,6 @@ const s = StyleSheet.create({
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
   greeting: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginBottom: 2, textTransform: 'capitalize' },
   headerTitle: { fontSize: 22, fontWeight: '700', color: '#fff' },
-  syncBtn: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  syncText: { fontSize: 18, color: '#fff', fontWeight: '600' },
   statsRow: { flexDirection: 'row', gap: 10 },
   statCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: 12 },
   statValue: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 2 },
