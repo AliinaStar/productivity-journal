@@ -1,27 +1,35 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useGoals } from '@/db/goals';
+import { useEntries } from '@/db/entries';
+import * as GoalsApi from '@/api-client/goals';
 import { GoalStatus } from '@/db/types';
 
-const STATUS_OPTIONS: { label: string; value: GoalStatus; color: string }[] = [
-  { label: 'Активна',   value: 'active',   color: '#7F77DD' },
-  { label: 'Відкладена', value: 'postpone', color: '#B4B2A9' },
-  { label: 'Завершена',  value: 'finished', color: '#4CAF88' },
+const STATUS_OPTIONS: { value: GoalStatus; color: string }[] = [
+  { value: 'active',   color: '#7F77DD' },
+  { value: 'postpone', color: '#B4B2A9' },
+  { value: 'finished', color: '#4CAF88' },
 ];
 
 export default function GoalEditScreen() {
+  const { t, i18n } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const goals = useGoals();
+  const entries = useEntries();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState<Date | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [status, setStatus] = useState<GoalStatus>('active');
+  const [remoteId, setRemoteId] = useState<number | null>(null);
+  const [entryCount, setEntryCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,8 +39,10 @@ export default function GoalEditScreen() {
       setDescription(goal.description ?? '');
       setDeadline(goal.deadline ? new Date(goal.deadline) : null);
       setStatus(goal.status);
+      setRemoteId(goal.remote_id);
       setLoading(false);
     });
+    entries.getByGoal(id).then(list => setEntryCount(list.length));
   }, [id]);
 
   function onDateChange(_: DateTimePickerEvent, selected?: Date) {
@@ -41,22 +51,55 @@ export default function GoalEditScreen() {
   }
 
   async function handleSave() {
-    if (!title.trim()) { setError('Введи назву цілі'); return; }
+    if (!title.trim()) { setError(t('goal.errorTitle')); return; }
     setSaving(true);
     setError(null);
+    const payload = {
+      title: title.trim(),
+      description: description.trim() || undefined,
+      deadline: deadline ? deadline.toISOString().split('T')[0] : undefined,
+      status,
+    };
     try {
-      await goals.update(id, {
-        title: title.trim(),
-        description: description.trim() || undefined,
-        deadline: deadline ? deadline.toISOString().split('T')[0] : undefined,
-        status,
-      });
+      await goals.update(id, payload);
+      if (remoteId) {
+        try {
+          await GoalsApi.updateGoal(remoteId, payload);
+          await goals.markSynced(id, remoteId);
+        } catch {
+          // Offline / server error — keep the local change for the next sync.
+        }
+      }
       router.back();
     } catch {
-      setError('Помилка збереження');
+      setError(t('goal.errorSave'));
     } finally {
       setSaving(false);
     }
+  }
+
+  async function performDelete() {
+    setDeleting(true);
+    setError(null);
+    try {
+      if (remoteId) await GoalsApi.deleteGoal(remoteId);
+      await goals.remove(id);
+      router.back();
+    } catch {
+      setError(t('goal.deleteError'));
+      setDeleting(false);
+    }
+  }
+
+  function handleDelete() {
+    Alert.alert(
+      t('goal.deleteTitle'),
+      t('goal.deleteMessage', { count: entryCount }),
+      [
+        { text: t('goal.cancel'), style: 'cancel' },
+        { text: t('goal.deleteConfirm'), style: 'destructive', onPress: performDelete },
+      ],
+    );
   }
 
   if (loading) {
@@ -69,30 +112,30 @@ export default function GoalEditScreen() {
 
   return (
     <ScrollView style={s.scroll} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-      <Text style={s.label}>Назва цілі</Text>
+      <Text style={s.label}>{t('goal.titleLabel')}</Text>
       <TextInput
         style={s.input}
-        placeholder="Назва"
+        placeholder={t('goal.titlePlaceholder')}
         placeholderTextColor="#B4B2A9"
         value={title}
         onChangeText={setTitle}
       />
 
-      <Text style={s.label}>Опис</Text>
+      <Text style={s.label}>{t('goal.descLabel')}</Text>
       <TextInput
         style={[s.input, s.multiline]}
-        placeholder="Додатковий контекст..."
+        placeholder={t('goal.descPlaceholder')}
         placeholderTextColor="#B4B2A9"
         value={description}
         onChangeText={setDescription}
         multiline
       />
 
-      <Text style={s.label}>Дедлайн</Text>
+      <Text style={s.label}>{t('goal.deadlineLabel')}</Text>
       <View style={s.dateRow}>
         <TouchableOpacity style={s.dateBtn} onPress={() => setShowPicker(true)}>
           <Text style={s.dateBtnText}>
-            {deadline ? deadline.toLocaleDateString('uk-UA') : 'Вибрати дату'}
+            {deadline ? deadline.toLocaleDateString(i18n.language === 'uk' ? 'uk-UA' : 'en-US') : t('goal.pickDate')}
           </Text>
         </TouchableOpacity>
         {deadline && (
@@ -105,7 +148,7 @@ export default function GoalEditScreen() {
         <DateTimePicker value={deadline ?? new Date()} mode="date" display="default" onChange={onDateChange} />
       )}
 
-      <Text style={s.label}>Статус</Text>
+      <Text style={s.label}>{t('goal.statusLabel')}</Text>
       <View style={s.statusRow}>
         {STATUS_OPTIONS.map(opt => (
           <TouchableOpacity
@@ -115,7 +158,7 @@ export default function GoalEditScreen() {
             activeOpacity={0.7}
           >
             <Text style={[s.statusChipText, status === opt.value && s.statusChipTextActive]}>
-              {opt.label}
+              {t(`goal.statuses.${opt.value}`)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -123,12 +166,16 @@ export default function GoalEditScreen() {
 
       {error && <Text style={s.error}>{error}</Text>}
 
-      <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving} activeOpacity={0.8}>
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>Зберегти</Text>}
+      <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving || deleting} activeOpacity={0.8}>
+        {saving ? <ActivityIndicator color="#fff" /> : <Text style={s.saveBtnText}>{t('goal.save')}</Text>}
       </TouchableOpacity>
 
       <TouchableOpacity style={s.cancelBtn} onPress={() => router.back()} activeOpacity={0.7}>
-        <Text style={s.cancelText}>Скасувати</Text>
+        <Text style={s.cancelText}>{t('goal.cancel')}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={s.deleteBtn} onPress={handleDelete} disabled={saving || deleting} activeOpacity={0.7}>
+        {deleting ? <ActivityIndicator color="#993C1D" /> : <Text style={s.deleteText}>{t('goal.delete')}</Text>}
       </TouchableOpacity>
     </ScrollView>
   );
@@ -155,4 +202,6 @@ const s = StyleSheet.create({
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   cancelBtn: { marginTop: 12, alignItems: 'center', padding: 12 },
   cancelText: { fontSize: 14, color: '#888780' },
+  deleteBtn: { marginTop: 8, alignItems: 'center', padding: 12 },
+  deleteText: { fontSize: 14, color: '#993C1D', fontWeight: '600' },
 });

@@ -96,6 +96,7 @@ export function useGoals() {
   async function upsertFromRemote(remote: RemoteGoal): Promise<void> {
     const existing = await getByRemoteId(remote.id);
     if (existing) {
+      if (existing.synced === 0) return;
       await db.runAsync(
         `UPDATE goals SET title = ?, description = ?, deadline = ?, status = ?, synced = 1 WHERE remote_id = ?`,
         [remote.title, remote.description ?? null, remote.deadline ?? null, remote.status, remote.id]

@@ -42,3 +42,10 @@ export async function updateGoal(remoteId: number, data: Partial<Pick<Goal, 'tit
 
   if (!res.ok) throw new Error(`Failed to update goal: ${res.status}`);
 }
+
+export async function deleteGoal(remoteId: number): Promise<void> {
+  const res = await apiFetch(`/goals/${remoteId}`, { method: 'DELETE' });
+
+  // 404 means the goal is already gone on the backend — treat as success.
+  if (!res.ok && res.status !== 404) throw new Error(`Failed to delete goal: ${res.status}`);
+}

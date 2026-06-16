@@ -8,11 +8,11 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.dependencies import Pagination, get_current_user, get_db, get_pagination
-from src.db.models import Goal, User
+from src.db.models import Entry, Goal, User
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
@@ -140,3 +140,29 @@ async def update_goal(
     await session.commit()
     await session.refresh(goal)
     return _to_response(goal)
+
+
+@router.delete("/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_goal(
+    goal_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete a goal owned by the current user, along with its entries.
+
+    The ``entry.goal_id`` foreign key has no ON DELETE CASCADE, so child
+    entries are removed explicitly before the goal itself.
+
+    Raises:
+        404: Goal not found or does not belong to the current user.
+    """
+    result = await session.execute(
+        select(Goal).where(Goal.id == goal_id, Goal.user_id == current_user.id)
+    )
+    goal = result.scalars().first()
+    if goal is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found.")
+
+    await session.execute(delete(Entry).where(Entry.goal_id == goal_id))
+    await session.delete(goal)
+    await session.commit()

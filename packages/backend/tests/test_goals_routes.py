@@ -33,6 +33,45 @@ def test_update_goal(client, make_user):
     assert res.json()["status"] == "finished"
 
 
+def test_delete_goal(client, make_user):
+    user = make_user()
+    goal_id = client.post("/goals", json=_GOAL, headers=user["headers"]).json()["id"]
+
+    res = client.delete(f"/goals/{goal_id}", headers=user["headers"])
+    assert res.status_code == 204
+
+    assert client.get("/goals", headers=user["headers"]).json() == []
+
+
+def test_delete_goal_removes_its_entries(client, make_user):
+    user = make_user()
+    goal_id = client.post("/goals", json=_GOAL, headers=user["headers"]).json()["id"]
+    client.post(
+        "/entries",
+        json={"goal_id": goal_id, "date_note": "2026-01-02", "note": "did it", "productivity_score": 4},
+        headers=user["headers"],
+    )
+
+    assert client.delete(f"/goals/{goal_id}", headers=user["headers"]).status_code == 204
+    assert client.get("/entries", headers=user["headers"]).json() == []
+
+
+def test_delete_missing_goal_returns_404(client, make_user):
+    user = make_user()
+    assert client.delete("/goals/999999", headers=user["headers"]).status_code == 404
+
+
+def test_user_cannot_delete_another_users_goal(client, make_user):
+    alice = make_user("alice@example.com")
+    bob = make_user("bob@example.com")
+
+    goal_id = client.post("/goals", json=_GOAL, headers=alice["headers"]).json()["id"]
+
+    assert client.delete(f"/goals/{goal_id}", headers=bob["headers"]).status_code == 404
+    # Alice's goal is untouched.
+    assert client.get("/goals", headers=alice["headers"]).json()[0]["id"] == goal_id
+
+
 def test_goal_not_visible_to_other_user(client, make_user):
     alice = make_user("alice@example.com")
     bob = make_user("bob@example.com")
