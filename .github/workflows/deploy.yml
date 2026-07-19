@@ -108,9 +108,13 @@ jobs:
           # deploy where a bad migration can destroy data unattended.
           # Failing here aborts the deploy on purpose: shipping a schema
           # change with no restore point is not worth the convenience.
+          # -T and </dev/null are load-bearing: this whole script arrives on
+          # the remote's stdin via `bash -s`, and `compose run` reads stdin by
+          # default. Without them it swallows the rest of the script and the
+          # deploy silently stops here, reporting success.
           docker compose -f docker-compose.prod.yml build backup
-          docker compose -f docker-compose.prod.yml run --rm backup \
-            /backup/backup.sh pre-deploy
+          docker compose -f docker-compose.prod.yml run --rm -T backup \
+            /backup/backup.sh pre-deploy < /dev/null
 
           # --build is required: the Dockerfile bakes the code in via COPY,
           # so a restart alone would keep running the old image.
