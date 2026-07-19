@@ -38,6 +38,8 @@ class EntryResponse(BaseModel):
     date_note: str
     note: str
     productivity_score: int
+    # NULL for entries created before the column existed.
+    created_at: str | None = None
 
 
 class CreateEntryRequest(BaseModel):
@@ -64,6 +66,7 @@ def _to_response(entry: Entry) -> EntryResponse:
         date_note=entry.date_note.isoformat(),
         note=entry.note,
         productivity_score=entry.productivity_score,
+        created_at=entry.created_at.isoformat() if entry.created_at else None,
     )
 
 

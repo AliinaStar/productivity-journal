@@ -25,6 +25,9 @@ def test_create_and_list_entry(client, make_user):
     created = client.post("/entries", json=_entry_body(goal_id), headers=user["headers"])
     assert created.status_code == 200
     assert created.json()["note"] == "read 20 pages"
+    # A freshly created entry carries a server-set creation timestamp; only
+    # rows predating the column are allowed to be null.
+    assert created.json()["created_at"] is not None
 
     listed = client.get("/entries", headers=user["headers"]).json()
     assert len(listed) == 1

@@ -145,6 +145,7 @@ async def export_data(
                 "date_note": e.date_note.isoformat(),
                 "note": e.note,
                 "productivity_score": e.productivity_score,
+                "created_at": e.created_at.isoformat() if e.created_at else None,
             }
             for e in entries
         ],

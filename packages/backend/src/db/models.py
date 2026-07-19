@@ -13,6 +13,7 @@ from sqlalchemy import (
     Boolean,
     Index,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -42,6 +43,21 @@ class Entry(Base):
     embedding: Mapped[list[float] | None] = mapped_column(
         Vector(768),  # Alibaba-NLP/gte-multilingual-base
         nullable=True
+    )
+    # When the row was written, as opposed to date_note (which day the entry
+    # is *about*). The gap between the two is the interesting part: it shows
+    # whether someone journals day by day or backfills a whole week at once.
+    #
+    # Nullable on purpose. Entries that predate this column have no knowable
+    # creation time, and backfilling them with the migration timestamp would
+    # invent a spike of ~1500 entries "written" at deploy time — corrupting
+    # exactly the analysis the column exists for. NULL means "unknown".
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        server_default=func.now(), onupdate=func.now(),
     )
 
     goal: Mapped["Goal"] = relationship(back_populates="entries")
@@ -82,6 +98,12 @@ class Report(Base):
     active_days: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[date] = mapped_column(Date)
     final_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Cost and latency of the LLM run that produced this report. Both are
+    # already measured by the create_report node; before this they were
+    # computed and thrown away. Nullable: rows written earlier have no
+    # measurement, and a failed-then-retried run may not have one either.
+    tokens_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    generation_time: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="reports")
 

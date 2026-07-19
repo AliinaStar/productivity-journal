@@ -276,6 +276,8 @@ async def save_report(
     avg_productivity: float | None,
     active_days: int,
     final_report: dict,
+    tokens_used: int | None = None,
+    generation_time: float | None = None,
 ) -> Report:
     """Persist a generated report to the ``report`` table and return the new row.
 
@@ -289,6 +291,9 @@ async def save_report(
         active_days:      Number of distinct days with at least one entry.
         final_report:     Parsed report dict (``model.model_dump()``),
                           stored as JSONB.
+        tokens_used:      Total LLM tokens spent generating this report,
+                          summaries included. ``None`` if not measured.
+        generation_time:  Wall-clock seconds spent in the final LLM call.
 
     Returns:
         The newly created ``Report`` ORM object with its ``id`` populated.
@@ -304,6 +309,8 @@ async def save_report(
             active_days=active_days,
             created_at=date.today(),
             final_report=final_report,
+            tokens_used=tokens_used,
+            generation_time=generation_time,
         )
         session.add(row)
         await session.commit()

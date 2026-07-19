@@ -25,17 +25,29 @@ export default function ProfileScreen() {
   const syncMeta = useSyncMeta();
   const goalsDb = useGoals();
   const { clearLocalData } = useSync();
-  const [userId, setUserId] = useState<number | null>(null);
+  const [profile, setProfile] = useState<{ name: string; email: string } | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [busy, setBusy] = useState(false);
   const [reminder, setReminder] = useState<ReminderTime>(DEFAULT_REMINDER_TIME);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
   useFocusEffect(useCallback(() => {
-    syncMeta.getUserRemoteId().then(setUserId);
+    loadProfile();
     goalsDb.getAll().then(setGoals);
     getReminderTime().then(setReminder);
   }, []));
+
+  async function loadProfile() {
+    try {
+      const res = await apiFetch('/users/me');
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setProfile({ name: data.name ?? '', email: data.email ?? '' });
+    } catch {
+      // Offline or expired session — keep whatever is already on screen
+      // instead of replacing a real name with a placeholder.
+    }
+  }
 
   function onReminderChange(event: DateTimePickerEvent, selected?: Date) {
     setShowTimePicker(false);
@@ -117,8 +129,8 @@ export default function ProfileScreen() {
         <View style={s.avatar}>
           <Text style={s.avatarText}>👤</Text>
         </View>
-        <Text style={s.name}>User {userId ?? '—'}</Text>
-        <Text style={s.meta}>ID: {userId ?? '—'}</Text>
+        <Text style={s.name}>{profile?.name || '—'}</Text>
+        <Text style={s.meta}>{profile?.email ?? ''}</Text>
         <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} disabled={busy} activeOpacity={0.8}>
           <Text style={s.logoutText}>{t('profile.logout')}</Text>
         </TouchableOpacity>

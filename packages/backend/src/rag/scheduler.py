@@ -105,6 +105,10 @@ async def _generate_one(user_id: int, period: str, date_dict: DateDict) -> None:
                 avg_productivity=state.get("avg_productivity"),
                 active_days=state.get("active_days", 0),
                 final_report=json.loads(state["final_report"]),
+                # Measured by the create_report node; until now the pipeline
+                # computed both and dropped them on the floor.
+                tokens_used=state.get("tokens_used"),
+                generation_time=state.get("generation_time"),
             )
             await _notify_report_ready(user_id, period)
         except Exception:
