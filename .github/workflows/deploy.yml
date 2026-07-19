@@ -1,0 +1,132 @@
+name: Deploy backend
+
+# Runs the test suite on every push to main, and deploys to the server only
+# if it passes. Also runnable by hand from the Actions tab.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/backend/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+# Never let two deploys touch the server at the same time. A newer push
+# waits for the running one rather than cancelling it, so the server is
+# never left mid-build.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/backend
+
+    services:
+      # Same image as dev/prod — the schema needs the pgvector extension.
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/backend/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run tests
+        env:
+          # conftest.py reads these and points the app at a test database
+          # it creates on this instance.
+          TEST_POSTGRES_HOST: localhost
+          TEST_POSTGRES_PORT: 5432
+          TEST_POSTGRES_USER: postgres
+          TEST_POSTGRES_PASSWORD: postgres
+          JWT_SECRET: ci-test-secret-not-for-production
+          # APP_ENV is deliberately left unset: conftest defaults it to
+          # "development", the only value settings.py lets run with the
+          # default "postgres" password used by the service container above.
+        run: uv run pytest -q
+
+  deploy:
+    name: Deploy
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Open SSH connection to the server
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${{ secrets.SSH_PORT || 22 }}" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Pull and rebuild
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          cd "$DEPLOY_PATH"
+
+          # --ff-only: refuse to deploy rather than silently discard or merge
+          # anything committed directly on the server.
+          git fetch origin main
+          git pull --ff-only origin main
+          echo "Deploying commit: $(git rev-parse --short HEAD)"
+
+          cd packages/backend
+          # --build is required: the Dockerfile bakes the code in via COPY,
+          # so a restart alone would keep running the old image.
+          docker compose -f docker-compose.prod.yml up -d --build api
+
+          # Drop the now-dangling previous image so the disk does not fill up.
+          docker image prune -f
+          REMOTE
+
+      - name: Verify the container is running the new code
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" bash -s <<'REMOTE'
+          set -euo pipefail
+          sleep 5
+          if [ "$(docker inspect -f '{{.State.Running}}' litopys_api)" != "true" ]; then
+            echo "litopys_api is not running after deploy:"
+            docker logs --tail 50 litopys_api
+            exit 1
+          fi
+          echo "litopys_api is up."
+          REMOTE
+
+      - name: Remove the deploy key
+        if: always()
+        run: rm -f ~/.ssh/id_deploy
