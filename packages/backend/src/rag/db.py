@@ -9,7 +9,7 @@ from datetime import date as date_type, date
 
 import numpy as np
 from sqlalchemy import extract, func, select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import contains_eager
 
 from src.db.models import Entry, Goal, Report, User
 from src.db.session import get_async_sessionmaker
@@ -111,10 +111,14 @@ async def query_entries(period: str, date: DateDict, user_id: int) -> dict:
     where_clause = build_where_clause(period, date, user_id)
 
     async with session_factory() as session:
+        # contains_eager (not joinedload): the WHERE-filtered join below must
+        # populate goal.entries, so each goal carries ONLY the current period's
+        # entries. joinedload adds its own unfiltered join, which would load
+        # every entry of the goal across all time and leak them into the prompt.
         result = await session.execute(
             select(Goal)
-            .options(joinedload(Goal.entries))
             .join(Goal.entries)
+            .options(contains_eager(Goal.entries))
             .where(where_clause)
         )
         goals = result.unique().scalars().all()
