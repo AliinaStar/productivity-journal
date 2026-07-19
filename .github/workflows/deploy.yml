@@ -102,9 +102,19 @@ jobs:
           echo "Deploying commit: $(git rev-parse --short HEAD)"
 
           cd packages/backend
+
+          # Take a dump BEFORE the new image starts, because start.sh runs
+          # `alembic upgrade head` on boot — this is the one moment in the
+          # deploy where a bad migration can destroy data unattended.
+          # Failing here aborts the deploy on purpose: shipping a schema
+          # change with no restore point is not worth the convenience.
+          docker compose -f docker-compose.prod.yml build backup
+          docker compose -f docker-compose.prod.yml run --rm backup \
+            /backup/backup.sh pre-deploy
+
           # --build is required: the Dockerfile bakes the code in via COPY,
           # so a restart alone would keep running the old image.
-          docker compose -f docker-compose.prod.yml up -d --build api
+          docker compose -f docker-compose.prod.yml up -d --build api backup
 
           # Drop the now-dangling previous image so the disk does not fill up.
           docker image prune -f
@@ -125,6 +135,15 @@ jobs:
             exit 1
           fi
           echo "litopys_api is up."
+
+          # A stopped backup container means backups silently stop happening,
+          # which is only ever discovered at the worst possible moment.
+          if [ "$(docker inspect -f '{{.State.Running}}' litopys_backup)" != "true" ]; then
+            echo "litopys_backup is not running — scheduled backups are DOWN:"
+            docker logs --tail 50 litopys_backup
+            exit 1
+          fi
+          echo "litopys_backup is up."
           REMOTE
 
       - name: Remove the deploy key

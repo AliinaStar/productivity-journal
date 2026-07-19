@@ -286,11 +286,71 @@ against access from inside the database (a compromised app/DB user still reads
 plaintext); column-level encryption of `entry.note` would be the next step if
 that threat matters.
 
+### Backups
+
+The `backup` service (`backup/`) runs `pg_dump` on a schedule, encrypts each
+dump with AES256, rotates old ones, and copies them off-site. Configure it
+through the `BACKUP_*` variables in `.env` — see `.env.example`.
+
+```
+/var/backups/litopys/        # BACKUP_DIR on the host
+├── daily/                   # BACKUP_KEEP_DAILY (7)
+├── weekly/                  # Sunday's dump, BACKUP_KEEP_WEEKLY (4)
+├── monthly/                 # the 1st's dump, BACKUP_KEEP_MONTHLY (6)
+├── adhoc/                   # pre-deploy and manual dumps
+└── LAST_SUCCESS             # timestamp of the last fully clean run
+```
+
+Weekly and monthly copies are hard links, so a dump held by three tiers still
+occupies the disk once.
+
+Every run verifies the archive with `pg_restore --list` and refuses to keep a
+dump that has no data section for `entry` — a corrupt or wrong-database dump
+is discarded instead of rotating out the good ones.
+
+**Restore rehearsals.** `BACKUP_VERIFY_CRON` restores the newest dump into a
+throwaway database weekly, counts rows and checks that embeddings survived,
+then drops it. Run one by hand at any time:
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm backup \
+    /backup/restore.sh --verify latest
+```
+
+**Restoring for real** (this overwrites the live database):
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm -e I_UNDERSTAND=yes \
+    backup /backup/restore.sh latest       # or a specific filename
+docker restart litopys_api
+```
+
+**Ad-hoc dump** — also what CI runs before every deploy, since `start.sh`
+applies migrations automatically on boot:
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm backup \
+    /backup/backup.sh pre-deploy
+```
+
+> **Keep `BACKUP_GPG_PASSPHRASE` in a password manager, not only in `.env`.**
+> It lives on the same server as the backups it protects; if that server is
+> gone, the off-site copies are unreadable without it.
+
+Backups fail silently by nature, so the service records `LAST_SUCCESS` and can
+ping a dead-man's switch (`BACKUP_HEALTHCHECK_URL`) after a clean run — set it
+up and let the absence of a ping be the alert. Check on the service with
+`docker logs litopys_backup`.
+
 Production checklist:
 - Set `APP_ENV=production` and a strong `JWT_SECRET` (the app refuses to boot otherwise).
 - Set real `POSTGRES_PASSWORD` in `.env`; remove the `db` port mapping from `docker-compose.yml`.
 - Put the API behind HTTPS (Caddy/nginx) and set `CORS_ORIGINS` to your real origin.
 - Enable encryption at rest on the database volume and on backups (see above).
+- Set `BACKUP_GPG_PASSPHRASE` and store it outside the server; point
+  `BACKUP_DIR` at an encrypted disk and fill in the off-site credentials.
+- Run one `restore.sh --verify latest` by hand after the first deploy — an
+  untested backup is not a backup.
 
 ## Tests
 

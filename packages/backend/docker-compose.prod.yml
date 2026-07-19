@@ -36,6 +36,25 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  backup:
+    build: ./backup
+    container_name: litopys_backup
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+    volumes:
+      # A host bind mount, deliberately NOT a named volume: `docker compose
+      # down -v` deletes named volumes, which would wipe the backups in the
+      # exact accident they exist to undo. Point BACKUP_DIR at a path on an
+      # encrypted disk (see README "Encryption at rest").
+      - ${BACKUP_DIR:-/var/backups/litopys}:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   caddy:
     image: caddy:2-alpine
     container_name: litopys_caddy

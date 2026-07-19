@@ -1,0 +1,4 @@
+# These scripts are executed by /bin/sh inside Linux containers. A CRLF
+# checkout on Windows makes the shebang read as `#!/bin/sh\r`, which fails
+# with a confusing "not found", so pin them to LF regardless of core.autocrlf.
+*.sh text eol=lf
