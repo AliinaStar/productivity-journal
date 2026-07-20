@@ -4,7 +4,7 @@ Matches the contract expected by ``api-client/entries.ts`` on the frontend.
 Entries are scoped to goals that belong to the current user.
 """
 
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
@@ -30,6 +30,23 @@ def _validate_iso_date(value: str | None) -> str | None:
     return value
 
 
+def _parse_client_created_at(value: str | None) -> datetime | None:
+    """Parse the client's local creation timestamp.
+
+    For entries written offline, the client's clock is the only honest record
+    of *when the note was actually written* — the server otherwise stamps
+    created_at at sync time, which for a backfilled week can be days late.
+    Returns None on missing/invalid input so a bad clock never blocks a sync;
+    the server default then takes over.
+    """
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 class EntryResponse(BaseModel):
     """Matches the ``RemoteEntry`` interface in ``api-client/entries.ts``."""
 
@@ -47,6 +64,10 @@ class CreateEntryRequest(BaseModel):
     date_note: str
     note: str = Field(min_length=1, max_length=NOTE_MAX_LENGTH)
     productivity_score: int = Field(ge=1, le=5)
+    # The client's local time when the note was written. Optional: entries
+    # created before the app started sending it, or with an unparseable value,
+    # fall back to the server-side default (sync time). ISO 8601 datetime.
+    created_at: str | None = None
 
     _check_date = field_validator("date_note")(_validate_iso_date)
 
@@ -111,12 +132,16 @@ async def create_entry(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found.")
 
     embedding = await _embed(body.note)
+    client_created_at = _parse_client_created_at(body.created_at)
     entry = Entry(
         goal_id=body.goal_id,
         date_note=date.fromisoformat(body.date_note),
         note=body.note,
         productivity_score=body.productivity_score,
         embedding=embedding,
+        # Only set when the client sent a usable value; leaving it unset lets
+        # the column's server_default (now()) apply as before.
+        **({"created_at": client_created_at} if client_created_at else {}),
     )
     session.add(entry)
     await session.commit()

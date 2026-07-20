@@ -34,6 +34,28 @@ def test_create_and_list_entry(client, make_user):
     assert listed[0]["goal_id"] == goal_id
 
 
+def test_create_entry_honours_client_created_at(client, make_user):
+    """An offline entry syncs with the device's real write time, not sync time."""
+    user = make_user()
+    goal_id = _make_goal(client, user["headers"])
+
+    body = _entry_body(goal_id) | {"created_at": "2026-01-02T09:30:00+00:00"}
+    created = client.post("/entries", json=body, headers=user["headers"])
+    assert created.status_code == 200
+    assert created.json()["created_at"].startswith("2026-01-02T09:30:00")
+
+
+def test_create_entry_ignores_unparseable_created_at(client, make_user):
+    """A bad client clock must never block a sync — the server default applies."""
+    user = make_user()
+    goal_id = _make_goal(client, user["headers"])
+
+    body = _entry_body(goal_id) | {"created_at": "not-a-date"}
+    created = client.post("/entries", json=body, headers=user["headers"])
+    assert created.status_code == 200
+    assert created.json()["created_at"] is not None
+
+
 def test_update_entry(client, make_user):
     user = make_user()
     goal_id = _make_goal(client, user["headers"])

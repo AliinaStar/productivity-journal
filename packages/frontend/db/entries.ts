@@ -109,7 +109,9 @@ export function useEntries() {
     const existing = await getByRemoteId(remote.id);
     if (existing) return;
     const id = genId();
-    const created_at = new Date().toISOString();
+    // Prefer the server's stored write time; only fall back to "now" for
+    // legacy entries that predate the created_at column (remote.created_at null).
+    const created_at = remote.created_at ?? new Date().toISOString();
     await db.runAsync(
       `INSERT INTO entries (id, goal_id, date_note, note, productivity_score, created_at, synced, remote_id)
        VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,

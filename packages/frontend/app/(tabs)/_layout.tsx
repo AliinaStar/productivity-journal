@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
+import { AppState, AppStateStatus, Text } from 'react-native';
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { setupNotifications } from '@/utils/notifications';
+import { setupNotifications, clearDeliveredNotifications } from '@/utils/notifications';
 import { useAutoSync } from '@/hooks/useAutoSync';
 
 export default function TabsLayout() {
@@ -16,6 +16,17 @@ export default function TabsLayout() {
   // registration call is guaranteed to have a session.
   useEffect(() => {
     setupNotifications();
+  }, []);
+
+  // Dismiss any tray notifications (and clear the icon badge) whenever the app
+  // is in the foreground — on cold open and on every return to 'active'. A
+  // report-ready push is stale once the user is already in the app.
+  useEffect(() => {
+    void clearDeliveredNotifications();
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'active') void clearDeliveredNotifications();
+    });
+    return () => sub.remove();
   }, []);
   return (
     <Tabs

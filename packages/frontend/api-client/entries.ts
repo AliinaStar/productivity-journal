@@ -7,6 +7,8 @@ export interface RemoteEntry {
   date_note: string;
   note: string;
   productivity_score: number;
+  // ISO datetime, or null for entries created before the column existed.
+  created_at: string | null;
 }
 
 export async function listEntries(limit = 100, offset = 0): Promise<RemoteEntry[]> {
@@ -27,6 +29,10 @@ export async function createEntry(
       date_note:          entry.date_note,
       note:               entry.note,
       productivity_score: entry.productivity_score,
+      // The device's real write time. For entries created offline this is
+      // the only honest record of when the note was written — the server
+      // otherwise stamps its own sync-time clock.
+      created_at:         entry.created_at,
     }),
   });
 

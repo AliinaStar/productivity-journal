@@ -119,6 +119,24 @@ async function registerPushToken(): Promise<void> {
   });
 }
 
+/**
+ * Clear notifications already sitting in the tray and reset the app-icon badge.
+ *
+ * Called when the app comes to the foreground: a "report ready" push has done
+ * its job the moment the user is looking at the app, so leaving it in the tray
+ * (and the badge on the icon) is just stale noise. Previously a notification
+ * only cleared if you tapped it. Best-effort — any failure is swallowed.
+ */
+export async function clearDeliveredNotifications(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    await Notifications.dismissAllNotificationsAsync();
+    await Notifications.setBadgeCountAsync(0);
+  } catch (e) {
+    console.warn('Failed to clear delivered notifications:', e);
+  }
+}
+
 /** Best-effort: tell the backend to stop pushing to this device (used on logout). */
 export async function unregisterPushToken(): Promise<void> {
   if (Platform.OS === 'web') return;
