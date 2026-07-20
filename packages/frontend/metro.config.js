@@ -6,8 +6,10 @@ const workspaceRoot = path.resolve(projectRoot, '../..');
 
 const config = getDefaultConfig(projectRoot);
 
-// Для monorepo - дивимося на всі workspace packages
-config.watchFolders = [workspaceRoot];
+// Для monorepo - дивимося на всі workspace packages.
+// Додаємо workspaceRoot ДО дефолтних watchFolders, а не замінюємо їх, інакше
+// expo-doctor скаржиться, що частина дефолтних записів зникла.
+config.watchFolders = [...config.watchFolders, workspaceRoot];
 
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),

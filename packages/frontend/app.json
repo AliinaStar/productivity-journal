@@ -35,7 +35,8 @@
       "@react-native-community/datetimepicker",
       "expo-sqlite",
       "expo-secure-store",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-localization"
     ],
     "scheme": "litopys",
     "extra": {
@@ -44,6 +45,12 @@
         "projectId": "0954cde6-7668-45a0-9127-4aa7539b1a87"
       }
     },
-    "owner": "alinastar"
+    "owner": "alinastar",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0954cde6-7668-45a0-9127-4aa7539b1a87"
+    }
   }
 }

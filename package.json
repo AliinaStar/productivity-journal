@@ -15,5 +15,10 @@
   },
   "dependencies": {
     "dotenv": "^17.2.3"
+  },
+  "//overrides": "React Native 0.81 / Expo SDK 54 require exactly react 19.1.0. Transitive deps otherwise pull a newer 19.x into the root, giving two copies of React (invalid-hook-call territory). Pin the whole tree to one version.",
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
   }
 }

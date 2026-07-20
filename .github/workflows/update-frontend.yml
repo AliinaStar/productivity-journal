@@ -1,0 +1,61 @@
+name: Publish frontend OTA update
+
+# Ships JS/asset changes to already-installed apps over the air, in seconds,
+# without a full native rebuild. Only JS-level changes propagate this way; a
+# new native dependency still needs `eas build` and a reinstall.
+#
+# PREREQUISITES (one-time, done locally with your Expo account):
+#   1. cd packages/frontend
+#      npx expo install expo-updates
+#      npx eas-cli update:configure      # writes updates.url + runtimeVersion
+#   2. one `eas build` so the installed binary contains expo-updates
+#   3. add an EXPO_TOKEN secret in the repo (Settings → Secrets → Actions)
+# Until those are done this workflow will fail — that is expected.
+on:
+  push:
+    branches: [main]
+    # Deliberately narrow: a backend-only push must not trigger a frontend
+    # update, and vice versa (see deploy.yml).
+    paths:
+      - "packages/frontend/**"
+      - ".github/workflows/update-frontend.yml"
+  workflow_dispatch:
+
+# An OTA update ships to users the instant it is published, so never let two
+# runs race — the newer push should win, cleanly.
+concurrency:
+  group: update-frontend
+  cancel-in-progress: true
+
+jobs:
+  update:
+    name: Publish update
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: packages/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # --branch production: the channel the production/preview builds listen
+      # on (set by update:configure). --message tags the update with the
+      # commit so you can see in the Expo dashboard what shipped.
+      - name: Publish OTA update
+        run: |
+          eas update --branch production --non-interactive \
+            --message "${{ github.event.head_commit.message }}"
