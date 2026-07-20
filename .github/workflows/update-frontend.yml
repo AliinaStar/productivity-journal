@@ -65,9 +65,17 @@ jobs:
       # fail the publish. Referencing "$UPDATE_MESSAGE" expands the value
       # without re-parsing its contents. Falls back to the SHA on manual
       # workflow_dispatch, where there is no head_commit.
+      # EXPO_PUBLIC_* vars are inlined into the JS bundle at build time, so the
+      # OTA bundle MUST be published with the same values the production build
+      # (eas.json) baked in. Otherwise EXPO_PUBLIC_API_URL is undefined here
+      # (.env is gitignored, absent in CI) and config.ts falls back to
+      # http://localhost:8000 — the OTA silently repoints the installed app at
+      # itself and breaks every network call. Keep this in sync with the
+      # `production` build profile's env in eas.json.
       - name: Publish OTA update
         env:
           UPDATE_MESSAGE: ${{ github.event.head_commit.message || github.sha }}
+          EXPO_PUBLIC_API_URL: https://api.litopys.app
         run: |
           eas update --branch production --non-interactive \
             --message "$UPDATE_MESSAGE"
