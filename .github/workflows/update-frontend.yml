@@ -59,7 +59,15 @@ jobs:
       # --branch production: the channel the production/preview builds listen
       # on (set by update:configure). --message tags the update with the
       # commit so you can see in the Expo dashboard what shipped.
+      # The commit message is passed via an env var, not interpolated directly
+      # into the script: embedded quotes/backticks in a message (e.g. "not in
+      # the future") would otherwise break the shell's argument parsing and
+      # fail the publish. Referencing "$UPDATE_MESSAGE" expands the value
+      # without re-parsing its contents. Falls back to the SHA on manual
+      # workflow_dispatch, where there is no head_commit.
       - name: Publish OTA update
+        env:
+          UPDATE_MESSAGE: ${{ github.event.head_commit.message || github.sha }}
         run: |
           eas update --branch production --non-interactive \
-            --message "${{ github.event.head_commit.message }}"
+            --message "$UPDATE_MESSAGE"
