@@ -36,7 +36,16 @@
       "expo-sqlite",
       "expo-secure-store",
       "expo-notifications",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ]
     ],
     "scheme": "litopys",
     "extra": {
