@@ -32,7 +32,7 @@ beforeEach(() => {
 
 describe('apiFetch', () => {
   it('attaches the Bearer access token', async () => {
-    const fetchMock = jest.fn(async () => jsonResponse(200, { ok: true }));
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse(200, { ok: true }));
     (global as any).fetch = fetchMock;
 
     await apiFetch('/goals');
