@@ -14,6 +14,7 @@ export default function SettingsScreen() {
   const [name, setName] = useState('');
   const [language, setLanguage] = useState('Ukrainian');
   const [gender, setGender] = useState('unspecified');
+  const [birthYear, setBirthYear] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +28,7 @@ export default function SettingsScreen() {
         setName(data.name ?? '');
         setLanguage(data.language ?? 'Ukrainian');
         setGender(data.gender ?? 'unspecified');
+        setBirthYear(data.birth_year != null ? String(data.birth_year) : '');
       } catch {
         setError(t('settings.errorLoad'));
       } finally {
@@ -38,13 +40,24 @@ export default function SettingsScreen() {
 
   async function handleSave() {
     if (!name.trim()) { setError(t('settings.errorName')); return; }
+    // Optional. Empty -> null (backend leaves the column untouched). If filled,
+    // it must be a plausible year; the same bound is re-checked server-side.
+    let birthYearValue: number | null = null;
+    if (birthYear.trim()) {
+      const n = Number(birthYear.trim());
+      if (!Number.isInteger(n) || n < 1900 || n > new Date().getFullYear()) {
+        setError(t('settings.errorBirthYear'));
+        return;
+      }
+      birthYearValue = n;
+    }
     setSaving(true);
     setError(null);
     try {
       const res = await apiFetch('/users/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), language, gender }),
+        body: JSON.stringify({ name: name.trim(), language, gender, birth_year: birthYearValue }),
       });
       if (!res.ok) throw new Error();
       router.back();
@@ -86,6 +99,9 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      <Text style={s.label}>{t('settings.birthYearLabel')}</Text>
+      <TextInput style={s.input} placeholder={t('settings.birthYearPlaceholder')} placeholderTextColor="#B4B2A9" value={birthYear} onChangeText={setBirthYear} keyboardType="number-pad" maxLength={4} />
 
       {error && <Text style={s.error}>{error}</Text>}
 

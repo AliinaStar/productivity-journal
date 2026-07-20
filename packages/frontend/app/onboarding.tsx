@@ -16,12 +16,24 @@ export default function OnboardingScreen() {
   const [name, setName] = useState('');
   const [language, setLanguage] = useState('Ukrainian');
   const [gender, setGender] = useState('unspecified');
+  const [birthYear, setBirthYear] = useState('');
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
     if (!name.trim()) { setError(t('onboarding.errorName')); return; }
+    // Optional. Empty -> null (column left unset); if filled it must be a
+    // plausible year. The same bound is re-checked server-side.
+    let birthYearValue: number | null = null;
+    if (birthYear.trim()) {
+      const n = Number(birthYear.trim());
+      if (!Number.isInteger(n) || n < 1900 || n > new Date().getFullYear()) {
+        setError(t('onboarding.errorBirthYear'));
+        return;
+      }
+      birthYearValue = n;
+    }
     if (!consent) { setError(t('onboarding.consentRequired')); return; }
     setLoading(true);
     setError(null);
@@ -29,7 +41,7 @@ export default function OnboardingScreen() {
       const res = await apiFetch('/users/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), language, gender }),
+        body: JSON.stringify({ name: name.trim(), language, gender, birth_year: birthYearValue }),
       });
       if (!res.ok) throw new Error();
       await apiFetch('/users/me/consent', { method: 'POST' });
@@ -77,6 +89,9 @@ export default function OnboardingScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      <Text style={s.label}>{t('onboarding.birthYearLabel')}</Text>
+      <TextInput style={s.input} placeholder={t('onboarding.birthYearPlaceholder')} placeholderTextColor="#B4B2A9" value={birthYear} onChangeText={setBirthYear} keyboardType="number-pad" maxLength={4} />
 
       <TouchableOpacity style={s.consentRow} onPress={() => setConsent(c => !c)} activeOpacity={0.7}>
         <View style={[s.checkbox, consent && s.checkboxOn]}>
