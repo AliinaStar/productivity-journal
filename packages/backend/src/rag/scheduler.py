@@ -24,6 +24,7 @@ from src.core.push import send_push
 from src.db.models import AuthCode, RefreshToken
 from src.db.session import get_async_sessionmaker
 from src.rag import db
+from src.core.observability import get_langfuse_callbacks
 from src.rag.pipeline import app as pipeline
 from src.rag.state import DateDict
 
@@ -88,11 +89,25 @@ async def _generate_one(user_id: int, period: str, date_dict: DateDict) -> None:
                 )
                 return
 
-            state = await pipeline.ainvoke({
-                "period": period,
-                "date": date_dict,
-                "user_id": user_id,
-            })
+            state = await pipeline.ainvoke(
+                {
+                    "period": period,
+                    "date": date_dict,
+                    "user_id": user_id,
+                },
+                # Callbacks propagate through LangGraph to every nested LLM call
+                # (create_report, the parallel summarizer calls) so the whole run
+                # lands in one trace. user_id/period are non-content dimensions for
+                # slicing cost & latency; the diary text in the prompts is masked
+                # by the client's global mask. Empty callbacks = Langfuse disabled.
+                config={
+                    "callbacks": get_langfuse_callbacks(),
+                    "metadata": {
+                        "langfuse_user_id": str(user_id),
+                        "langfuse_tags": [f"period:{period}"],
+                    },
+                },
+            )
             if not state or not state.get("final_report"):
                 logger.warning("No report generated for user=%s period=%s date=%s", user_id, period, date_dict)
                 return

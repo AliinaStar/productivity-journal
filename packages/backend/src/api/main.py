@@ -18,6 +18,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.core.logging import get_logger, setup_logging
+from src.core.observability import flush_langfuse
 from src.core.ratelimit import limiter
 from src.core.settings import get_settings
 from src.db.session import get_async_sessionmaker
@@ -48,6 +49,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     scheduler.start()
     yield
     scheduler.shutdown()
+    # Flush any buffered Langfuse events so the last batch isn't dropped.
+    flush_langfuse()
 
 
 def create_app() -> FastAPI:
