@@ -46,4 +46,5 @@ export interface SyncMeta {
 export const SYNC_KEYS = {
   LAST_SYNC_AT: 'last_sync_at',
   USER_REMOTE_ID: 'user_remote_id',
+  TOUR_COMPLETED: 'tour_completed',
 } as const;

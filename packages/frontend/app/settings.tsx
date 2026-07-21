@@ -4,15 +4,12 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { apiFetch } from '@/api-client/client';
 import { APP_LANGUAGES, APP_LANGUAGE_LABELS, AppLanguage, setAppLanguage } from '@/utils/locale';
-import { REPORT_LANGUAGES } from '@/utils/reportLanguages';
-import { LanguageSelect } from '@/components/language-select';
 
 const GENDER_KEYS = ['female', 'male', 'unspecified'] as const;
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
   const [name, setName] = useState('');
-  const [language, setLanguage] = useState('Ukrainian');
   const [gender, setGender] = useState('unspecified');
   const [birthYear, setBirthYear] = useState('');
   const [loading, setLoading] = useState(true);
@@ -26,7 +23,6 @@ export default function SettingsScreen() {
         if (!res.ok) throw new Error();
         const data = await res.json();
         setName(data.name ?? '');
-        setLanguage(data.language ?? 'Ukrainian');
         setGender(data.gender ?? 'unspecified');
         setBirthYear(data.birth_year != null ? String(data.birth_year) : '');
       } catch {
@@ -57,7 +53,7 @@ export default function SettingsScreen() {
       const res = await apiFetch('/users/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), language, gender, birth_year: birthYearValue }),
+        body: JSON.stringify({ name: name.trim(), gender, birth_year: birthYearValue }),
       });
       if (!res.ok) throw new Error();
       router.back();
@@ -87,9 +83,6 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         ))}
       </View>
-
-      <Text style={s.label}>{t('settings.languageLabel')}</Text>
-      <LanguageSelect value={language} options={REPORT_LANGUAGES} onChange={setLanguage} />
 
       <Text style={s.label}>{t('settings.genderLabel')}</Text>
       <View style={s.chips}>

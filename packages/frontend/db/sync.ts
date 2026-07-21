@@ -37,5 +37,16 @@ export function useSyncMeta() {
     return set(SYNC_KEYS.USER_REMOTE_ID, String(remoteId));
   }
 
-  return { get, set, getLastSyncAt, setLastSyncAt, getUserRemoteId, setUserRemoteId };
+  async function getTourCompleted(): Promise<boolean> {
+    return (await get(SYNC_KEYS.TOUR_COMPLETED)) === '1';
+  }
+
+  async function setTourCompleted(): Promise<void> {
+    return set(SYNC_KEYS.TOUR_COMPLETED, '1');
+  }
+
+  return {
+    get, set, getLastSyncAt, setLastSyncAt, getUserRemoteId, setUserRemoteId,
+    getTourCompleted, setTourCompleted,
+  };
 }

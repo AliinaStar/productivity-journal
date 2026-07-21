@@ -1,16 +1,91 @@
 {
   "tabs": {
-    "home": "Головна",
-    "notes": "Нотатки",
-    "summary": "Підсумки",
+    "today": "Сьогодні",
+    "overview": "Огляд",
     "profile": "Профіль"
   },
-  "home": {
-    "greetDay": "Продуктивного дня!",
-    "activeGoals": "активних цілей",
-    "weekEntries": "нотаток за тиждень",
-    "sectionLabel": "Активні цілі",
-    "empty": "Немає активних цілей.\nНатисни + щоб додати."
+  "today": {
+    "title": "Сьогодні",
+    "tapToRecord": "НАТИСНИ, ЩОБ ЗАПИСАТИ",
+    "noEntryToday": "Ще нема запису сьогодні",
+    "entriesToday_one": "✓ {{count}} запис сьогодні",
+    "entriesToday_few": "✓ {{count}} записи сьогодні",
+    "entriesToday_many": "✓ {{count}} записів сьогодні",
+    "entriesToday_other": "✓ {{count}} записів сьогодні",
+    "addEntry": "Ще запис",
+    "newGoal": "Нова ціль",
+    "manageGoals": "Керування цілями",
+    "empty": "Немає активних цілей.\nНатисни «Нова ціль», щоб додати."
+  },
+  "goals": {
+    "title": "Мої цілі",
+    "tabs": {
+      "active": "Активні",
+      "finished": "Завершені",
+      "postpone": "Відкладені"
+    },
+    "openHistory": "Відкрити історію →",
+    "empty": "Тут поки немає цілей"
+  },
+  "overview": {
+    "title": "Огляд",
+    "subtitle": "Підсумки твого прогресу"
+  },
+  "tour": {
+    "start": "Почати тур →",
+    "next": "Далі →",
+    "finish": "Завершити ✓",
+    "skip": "Пропустити тур",
+    "welcomeTagline": "Щоденник, що пам'ятає кожен твій крок до цілі",
+    "doneHeadline": "Все готово",
+    "doneSub": "Тепер твій Litopys чекає на перший запис",
+    "mock": {
+      "goalRun": "Бігти марафон",
+      "goalRead": "Читати 20 книжок",
+      "entry": "Ранкові 8 км, чудовий темп.",
+      "ovPeriod": "14–20 ЛИПНЯ",
+      "ovHeadline": "Сильний тиждень бігу",
+      "ovBody": "5 пробіжок, у середньому ★4.2."
+    },
+    "steps": {
+      "welcome": {
+        "title": "Вітаю в Litopys",
+        "desc": "За 20 секунд покажу головне)"
+      },
+      "newGoal": {
+        "title": "Додай ціль",
+        "desc": "Тисни «＋ Нова ціль», щоб створити те, до чого прагнеш."
+      },
+      "record": {
+        "title": "Додай запис",
+        "desc": "Натисни ціль на «Сьогодні» — і швидко запиши сьогоднішній прогрес."
+      },
+      "manage": {
+        "title": "Керуй цілями",
+        "desc": "«Керування цілями» збирає все за статусами: активні, завершені, відкладені."
+      },
+      "history": {
+        "title": "Ціль з історією",
+        "desc": "Усередині цілі — таймлайн усіх твоїх записів і статистика."
+      },
+      "overview": {
+        "title": "Огляд підсумків",
+        "desc": "Вкладка «Огляд» щотижня збирає підсумки твого прогресу."
+      },
+      "done": {
+        "title": "Готово!",
+        "desc": "Тепер спробуй сам: додай запис, відкрий ціль, погортай вкладки."
+      }
+    }
+  },
+  "goalDetail": {
+    "edit": "Змінити",
+    "entriesLabel": "записів",
+    "avgLabel": "середнє ★",
+    "streakLabel": "днів поспіль",
+    "historyLabel": "ІСТОРІЯ ЗАПИСІВ",
+    "yesterday": "Учора",
+    "emptyHistory": "Записів ще немає"
   },
   "deadline": {
     "today": "Сьогодні",
@@ -22,19 +97,19 @@
     "overdue": "Прострочено"
   },
   "notes": {
-    "title": "Нотатки",
-    "empty": "Нотаток ще немає",
     "entries_one": "{{count}} запис",
     "entries_few": "{{count}} записи",
     "entries_many": "{{count}} записів",
-    "entries_other": "{{count}} записів",
-    "noEntries": "Немає записів за цей день"
+    "entries_other": "{{count}} записів"
   },
   "summary": {
     "title": "Підсумки",
     "weeks": "Тижні",
     "months": "Місяці",
     "years": "Роки",
+    "weekTab": "Тиждень",
+    "monthTab": "Місяць",
+    "yearTab": "Рік",
     "noReports": "Немає збережених звітів",
     "activeDays_one": "{{count}} активний день",
     "activeDays_few": "{{count}} активних дні",
@@ -57,12 +132,12 @@
     "errorCode": "Невірний або прострочений код."
   },
   "profile": {
-    "myGoals": "Мої цілі",
-    "noGoals": "Цілей ще немає",
     "logout": "Вийти",
-    "notifications": "Нагадування",
-    "reminderTime": "Час щоденного нагадування",
-    "dataPrivacy": "Дані та приватність",
+    "settingsSection": "Налаштування",
+    "editProfile": "Налаштування профілю",
+    "reminderTime": "Нагадування",
+    "reportLanguage": "Мова генерування тексту",
+    "retakeTour": "Пройти тур ще раз",
     "exportData": "Експортувати мої дані (JSON)",
     "privacyPolicy": "Політика приватності",
     "deleteAccount": "Видалити акаунт",
@@ -73,15 +148,10 @@
     "deleteError": "Не вдалося видалити акаунт. Спробуйте ще раз.",
     "exportError": "Не вдалося експортувати дані. Спробуйте ще раз.",
     "exportSaved": "Ваші дані експортовано.",
-    "groups": {
-      "active": "Активні",
-      "finished": "Завершені",
-      "postpone": "Архів"
-    },
-    "status": {
-      "active": "Активна",
-      "finished": "Завершена",
-      "postpone": "Відкладена"
+    "stats": {
+      "entries": "записів",
+      "streak": "днів поспіль",
+      "avg": "середнє ★"
     }
   },
   "privacy": {
@@ -116,7 +186,6 @@
     "nameLabel": "Ім'я",
     "namePlaceholder": "Ім'я",
     "appLanguageLabel": "Мова застосунку",
-    "languageLabel": "Мова звітів",
     "genderLabel": "Стать",
     "birthYearLabel": "Рік народження (необов'язково)",
     "birthYearPlaceholder": "напр. 1999",
@@ -128,6 +197,10 @@
     "errorSave": "Не вдалося зберегти. Спробуй ще раз."
   },
   "goal": {
+    "detailTitle": "Ціль",
+    "newTitle": "Нова ціль",
+    "newSubtitle": "Що ти хочеш робити регулярно?",
+    "create": "Створити ціль",
     "titleLabel": "Назва цілі",
     "titlePlaceholder": "Напр. Бігти марафон",
     "descLabel": "Опис",
@@ -154,21 +227,18 @@
     }
   },
   "entry": {
+    "new": "Новий запис",
     "noteLabel": "Що ти зробила сьогодні?",
     "notePlaceholder": "Напиши тут...",
     "scoreLabel": "Відчуття прогресу",
     "save": "Зберегти",
+    "cancel": "Скасувати",
     "errorEmpty": "Напиши нотатку",
     "errorSave": "Помилка збереження"
   },
   "notifications": {
     "dailyTitle": "Час для нотатки ✍️",
     "dailyBody": "Запиши, що ти сьогодні зробила для своїх цілей."
-  },
-  "nav": {
-    "newGoal": "Нова ціль",
-    "addNote": "Додати нотатку",
-    "notesList": "Нотатки"
   },
   "languageSelect": {
     "searchPlaceholder": "Пошук мови…",

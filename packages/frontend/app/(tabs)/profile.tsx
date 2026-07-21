@@ -1,12 +1,13 @@
 import { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useSyncMeta } from '@/db/sync';
-import { useGoals } from '@/db/goals';
+import { useEntries } from '@/db/entries';
 import { useSync } from '@/hooks/useSync';
 import { apiFetch, logout } from '@/api-client/client';
 import {
@@ -16,24 +17,32 @@ import {
   setReminderTime,
   unregisterPushToken,
 } from '@/utils/notifications';
-import { Goal } from '@/db/types';
-import { formatDeadline } from '@/utils/deadline';
-import type { TFunction } from 'i18next';
+import { computeStreak } from '@/utils/streak';
+import { REPORT_LANGUAGES } from '@/utils/reportLanguages';
+import { LanguagePickerModal } from '@/components/language-select';
+
+interface Stats {
+  count: number;
+  avg: number | null;
+  streak: number;
+}
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const syncMeta = useSyncMeta();
-  const goalsDb = useGoals();
+  const entriesDb = useEntries();
   const { clearLocalData } = useSync();
-  const [profile, setProfile] = useState<{ name: string; email: string } | null>(null);
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const [profile, setProfile] = useState<{ name: string; email: string; language: string } | null>(null);
+  const [stats, setStats] = useState<Stats>({ count: 0, avg: null, streak: 0 });
   const [busy, setBusy] = useState(false);
   const [reminder, setReminder] = useState<ReminderTime>(DEFAULT_REMINDER_TIME);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [langPickerOpen, setLangPickerOpen] = useState(false);
 
   useFocusEffect(useCallback(() => {
     loadProfile();
-    goalsDb.getAll().then(setGoals);
+    loadStats();
     getReminderTime().then(setReminder);
   }, []));
 
@@ -42,10 +51,34 @@ export default function ProfileScreen() {
       const res = await apiFetch('/users/me');
       if (!res.ok) throw new Error();
       const data = await res.json();
-      setProfile({ name: data.name ?? '', email: data.email ?? '' });
+      setProfile({ name: data.name ?? '', email: data.email ?? '', language: data.language ?? '' });
     } catch {
       // Offline or expired session — keep whatever is already on screen
-      // instead of replacing a real name with a placeholder.
+      // instead of replacing real data with a placeholder.
+    }
+  }
+
+  async function loadStats() {
+    const all = await entriesDb.getAll();
+    const count = all.length;
+    const avg = count > 0 ? all.reduce((sum, e) => sum + e.productivity_score, 0) / count : null;
+    setStats({ count, avg, streak: computeStreak(all.map(e => e.date_note)) });
+  }
+
+  async function saveReportLanguage(language: string) {
+    setLangPickerOpen(false);
+    const prev = profile;
+    // Optimistically reflect the choice; roll back if the server rejects it.
+    setProfile(p => (p ? { ...p, language } : p));
+    try {
+      const res = await apiFetch('/users/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setProfile(prev);
     }
   }
 
@@ -116,29 +149,39 @@ export default function ProfileScreen() {
     );
   }
 
-  const active    = goals.filter(g => g.status === 'active');
-  const completed = goals.filter(g => g.status === 'finished');
-  const archived  = goals.filter(g => g.status === 'postpone');
-
   return (
-    <ScrollView style={s.scroll} contentContainerStyle={s.content}>
+    <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingTop: insets.top + 14 }]}>
       <View style={s.header}>
-        <TouchableOpacity style={s.gearBtn} onPress={() => router.push('/settings')} activeOpacity={0.7}>
-          <Text style={s.gearIcon}>⚙️</Text>
-        </TouchableOpacity>
         <View style={s.avatar}>
           <Text style={s.avatarText}>👤</Text>
         </View>
         <Text style={s.name}>{profile?.name || '—'}</Text>
         <Text style={s.meta}>{profile?.email ?? ''}</Text>
-        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} disabled={busy} activeOpacity={0.8}>
-          <Text style={s.logoutText}>{t('profile.logout')}</Text>
-        </TouchableOpacity>
       </View>
 
-      <Text style={s.sectionTitle}>{t('profile.notifications')}</Text>
+      <View style={s.statsRow}>
+        <View style={s.statCard}>
+          <Text style={s.statValue}>{stats.count}</Text>
+          <Text style={s.statLabel}>{t('profile.stats.entries')}</Text>
+        </View>
+        <View style={s.statCard}>
+          <Text style={s.statValue}>{stats.streak}</Text>
+          <Text style={s.statLabel}>{t('profile.stats.streak')}</Text>
+        </View>
+        <View style={s.statCard}>
+          <Text style={s.statValue}>{stats.avg != null ? stats.avg.toFixed(1) : '—'}</Text>
+          <Text style={s.statLabel}>{t('profile.stats.avg')}</Text>
+        </View>
+      </View>
+
+      <Text style={s.sectionTitle}>{t('profile.settingsSection')}</Text>
       <View style={s.group}>
-        <TouchableOpacity style={[s.row, s.rowBetween]} onPress={() => setShowTimePicker(true)} activeOpacity={0.7}>
+        <TouchableOpacity style={[s.row, s.rowDivider, s.rowBetween]} onPress={() => router.push('/settings')} activeOpacity={0.7}>
+          <Text style={s.rowText}>{t('profile.editProfile')}</Text>
+          <Text style={s.rowChevron}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[s.row, s.rowDivider, s.rowBetween]} onPress={() => setShowTimePicker(true)} activeOpacity={0.7}>
           <Text style={s.rowText}>{t('profile.reminderTime')}</Text>
           <Text style={s.rowValue}>
             {`${String(reminder.hour).padStart(2, '0')}:${String(reminder.minute).padStart(2, '0')}`}
@@ -153,98 +196,70 @@ export default function ProfileScreen() {
             onChange={onReminderChange}
           />
         )}
-      </View>
 
-      <Text style={s.sectionTitle}>{t('profile.dataPrivacy')}</Text>
-      <View style={s.group}>
-        <TouchableOpacity style={s.row} onPress={handleExport} disabled={busy} activeOpacity={0.7}>
+        <TouchableOpacity style={[s.row, s.rowDivider, s.rowBetween]} onPress={() => setLangPickerOpen(true)} activeOpacity={0.7}>
+          <Text style={s.rowText}>{t('profile.reportLanguage')}</Text>
+          <Text style={s.rowValue}>{profile?.language || '—'}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[s.row, s.rowDivider, s.rowBetween]} onPress={() => router.push('/tour')} activeOpacity={0.7}>
+          <Text style={s.rowText}>{t('profile.retakeTour')}</Text>
+          <Text style={s.rowChevron}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[s.row, s.rowDivider, s.rowBetween]} onPress={() => router.push('/privacy')} activeOpacity={0.7}>
+          <Text style={s.rowText}>{t('profile.privacyPolicy')}</Text>
+          <Text style={s.rowChevron}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[s.row, s.rowDivider]} onPress={handleExport} disabled={busy} activeOpacity={0.7}>
           <Text style={s.rowText}>{t('profile.exportData')}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.row} onPress={() => router.push('/privacy')} activeOpacity={0.7}>
-          <Text style={s.rowText}>{t('profile.privacyPolicy')}</Text>
-        </TouchableOpacity>
+
         <TouchableOpacity style={s.row} onPress={handleDeleteAccount} disabled={busy} activeOpacity={0.7}>
           <Text style={[s.rowText, s.danger]}>{t('profile.deleteAccount')}</Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={s.sectionTitle}>{t('profile.myGoals')}</Text>
+      <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} disabled={busy} activeOpacity={0.8}>
+        <Text style={s.logoutText}>{t('profile.logout')}</Text>
+      </TouchableOpacity>
 
-      {goals.length === 0 ? (
-        <Text style={s.empty}>{t('profile.noGoals')}</Text>
-      ) : (
-        <>
-          {active.length > 0    && <GoalGroup label={t('profile.groups.active')}   goals={active} t={t} />}
-          {completed.length > 0 && <GoalGroup label={t('profile.groups.finished')} goals={completed} t={t} />}
-          {archived.length > 0  && <GoalGroup label={t('profile.groups.postpone')} goals={archived} t={t} />}
-        </>
-      )}
+      <LanguagePickerModal
+        visible={langPickerOpen}
+        value={profile?.language ?? ''}
+        options={REPORT_LANGUAGES}
+        onSelect={saveReportLanguage}
+        onClose={() => setLangPickerOpen(false)}
+      />
     </ScrollView>
-  );
-}
-
-const STATUS_COLOR: Record<string, string> = {
-  active:   '#7F77DD',
-  finished: '#4CAF88',
-  postpone: '#B4B2A9',
-};
-
-function GoalGroup({ label, goals, t }: { label: string; goals: Goal[]; t: TFunction }) {
-  return (
-    <View style={s.group}>
-      <Text style={s.groupLabel}>{label}</Text>
-      {goals.map(goal => (
-        <View key={goal.id} style={s.card}>
-          <View style={s.cardRow}>
-            <Text style={s.cardTitle} numberOfLines={1}>{goal.title}</Text>
-            <View style={s.cardActions}>
-              <View style={[s.badge, { backgroundColor: STATUS_COLOR[goal.status] + '22' }]}>
-                <Text style={[s.badgeText, { color: STATUS_COLOR[goal.status] }]}>
-                  {t(`profile.status.${goal.status}`)}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => router.push(`/goal/edit/${goal.id}`)} style={s.editBtn} activeOpacity={0.7}>
-                <Text style={s.editIcon}>✏️</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          {goal.description ? <Text style={s.cardDesc} numberOfLines={2}>{goal.description}</Text> : null}
-          {goal.deadline ? <Text style={s.cardMeta}>{formatDeadline(goal.deadline, t).text}</Text> : null}
-        </View>
-      ))}
-    </View>
   );
 }
 
 const s = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#F5F4F0' },
   content: { padding: 20, paddingBottom: 40 },
-  header: { alignItems: 'center', marginBottom: 32 },
-  gearBtn: { position: 'absolute', top: 0, right: 0, padding: 8 },
-  gearIcon: { fontSize: 22 },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#EEEDFE', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  avatarText: { fontSize: 36 },
-  name: { fontSize: 18, fontWeight: '600', color: '#26215C', marginBottom: 2 },
-  meta: { fontSize: 13, color: '#888780', marginBottom: 16 },
-  logoutBtn: { backgroundColor: '#FAECE7', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 24 },
-  logoutText: { color: '#993C1D', fontSize: 14, fontWeight: '600' },
-  sectionTitle: { fontSize: 11, fontWeight: '700', color: '#B4B2A9', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12, marginTop: 8 },
-  row: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8 },
+  header: { alignItems: 'center', marginBottom: 18 },
+  avatar: { width: 66, height: 66, borderRadius: 33, backgroundColor: '#EEEDFE', justifyContent: 'center', alignItems: 'center', marginBottom: 9 },
+  avatarText: { fontSize: 30 },
+  name: { fontSize: 19, fontWeight: '800', color: '#26215C', marginBottom: 1 },
+  meta: { fontSize: 12, color: '#928F87' },
+
+  statsRow: { flexDirection: 'row', gap: 9, marginTop: 18 },
+  statCard: { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#EEECE6', borderRadius: 16, padding: 12, alignItems: 'center' },
+  statValue: { fontSize: 19, fontWeight: '800', color: '#26215C' },
+  statLabel: { fontSize: 10, fontWeight: '500', color: '#928F87', marginTop: 2 },
+
+  sectionTitle: { fontSize: 11, fontWeight: '700', color: '#B4B2A9', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 10, marginTop: 22 },
+  group: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#EEECE6', borderRadius: 15, overflow: 'hidden' },
+  row: { paddingVertical: 13, paddingHorizontal: 15 },
+  rowDivider: { borderBottomWidth: 1, borderBottomColor: '#F2F0EA' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  rowText: { fontSize: 14, color: '#2C2C2A', fontWeight: '500' },
-  rowValue: { fontSize: 14, color: '#7F77DD', fontWeight: '600' },
+  rowText: { fontSize: 13, color: '#2C2C2A', fontWeight: '500' },
+  rowValue: { fontSize: 12.5, fontWeight: '600', color: '#928F87' },
+  rowChevron: { fontSize: 13, fontWeight: '600', color: '#B4B2A9' },
   danger: { color: '#993C1D' },
-  empty: { textAlign: 'center', color: '#B4B2A9', fontSize: 14, marginTop: 20 },
-  group: { marginBottom: 20 },
-  groupLabel: { fontSize: 11, fontWeight: '700', color: '#B4B2A9', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
-  card: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 8 },
-  cardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  cardActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  editBtn: { padding: 2 },
-  editIcon: { fontSize: 15 },
-  cardTitle: { fontSize: 14, fontWeight: '600', color: '#2C2C2A', flex: 1, marginRight: 8 },
-  badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontSize: 11, fontWeight: '600' },
-  cardDesc: { fontSize: 13, color: '#5F5E5A', lineHeight: 18, marginBottom: 4 },
-  cardMeta: { fontSize: 12, color: '#B4B2A9' },
+
+  logoutBtn: { backgroundColor: '#FAECE7', borderRadius: 13, paddingVertical: 12, alignItems: 'center', marginTop: 16 },
+  logoutText: { color: '#993C1D', fontSize: 13, fontWeight: '700' },
 });

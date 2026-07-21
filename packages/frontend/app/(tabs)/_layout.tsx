@@ -1,9 +1,21 @@
 import { useEffect } from 'react';
-import { AppState, AppStateStatus, Text } from 'react-native';
+import { AppState, AppStateStatus, View, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { setupNotifications, clearDeliveredNotifications } from '@/utils/notifications';
 import { useAutoSync } from '@/hooks/useAutoSync';
+import { NavIcon, NavShape } from '@/components/nav-icon';
+
+// Icons are drawn from Views (see NavIcon) rather than an icon font or emoji,
+// neither of which rendered on the target device. A light "pill" behind the
+// active tab is the active-state cue since labels are hidden.
+function TabIcon({ shape, color, focused }: { shape: NavShape; color: string; focused: boolean }) {
+  return (
+    <View style={[styles.iconPill, focused && styles.iconPillActive]}>
+      <NavIcon shape={shape} color={color} />
+    </View>
+  );
+}
 
 export default function TabsLayout() {
   const { t } = useTranslation();
@@ -33,6 +45,7 @@ export default function TabsLayout() {
       screenOptions={{
         tabBarActiveTintColor: '#7F77DD',
         tabBarInactiveTintColor: '#B4B2A9',
+        tabBarShowLabel: false,
         tabBarStyle: { borderTopColor: '#F0EEE8' },
         headerStyle: { backgroundColor: '#534AB7' },
         headerTintColor: '#fff',
@@ -42,31 +55,37 @@ export default function TabsLayout() {
         name="index"
         options={{
           headerShown: false,
-          title: t('tabs.home'),
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>⌂</Text>,
-        }}
-      />
-      <Tabs.Screen
-        name="notesList"
-        options={{
-          title: t('tabs.notes'),
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>✎</Text>,
+          title: t('tabs.today'),
+          tabBarIcon: ({ color, focused }) => <TabIcon shape="home" color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="summaryList"
         options={{
-          title: t('tabs.summary'),
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>↗</Text>,
+          headerShown: false,
+          title: t('tabs.overview'),
+          tabBarIcon: ({ color, focused }) => <TabIcon shape="bars" color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
+          headerShown: false,
           title: t('tabs.profile'),
-          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>◎</Text>,
+          tabBarIcon: ({ color, focused }) => <TabIcon shape="person" color={color} focused={focused} />,
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  iconPill: {
+    paddingHorizontal: 17,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  iconPillActive: {
+    backgroundColor: '#EEEDFE',
+  },
+});

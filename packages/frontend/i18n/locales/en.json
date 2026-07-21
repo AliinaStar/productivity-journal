@@ -1,16 +1,89 @@
 {
   "tabs": {
-    "home": "Home",
-    "notes": "Notes",
-    "summary": "Summary",
+    "today": "Today",
+    "overview": "Overview",
     "profile": "Profile"
   },
-  "home": {
-    "greetDay": "Productive day!",
-    "activeGoals": "active goals",
-    "weekEntries": "notes this week",
-    "sectionLabel": "Active goals",
-    "empty": "No active goals.\nTap + to add one."
+  "today": {
+    "title": "Today",
+    "tapToRecord": "TAP TO RECORD",
+    "noEntryToday": "No entry yet today",
+    "entriesToday_one": "✓ {{count}} entry today",
+    "entriesToday_other": "✓ {{count}} entries today",
+    "addEntry": "Add another entry",
+    "newGoal": "New goal",
+    "manageGoals": "Manage goals",
+    "empty": "No active goals.\nTap “New goal” to add one."
+  },
+  "goals": {
+    "title": "My goals",
+    "tabs": {
+      "active": "Active",
+      "finished": "Completed",
+      "postpone": "Postponed"
+    },
+    "openHistory": "Open history →",
+    "empty": "No goals here yet"
+  },
+  "overview": {
+    "title": "Overview",
+    "subtitle": "A summary of your progress"
+  },
+  "tour": {
+    "start": "Start the tour →",
+    "next": "Next →",
+    "finish": "Finish ✓",
+    "skip": "Skip the tour",
+    "welcomeTagline": "A diary that remembers every step toward your goal",
+    "doneHeadline": "All set",
+    "doneSub": "Your Litopys is ready for your first entry",
+    "mock": {
+      "goalRun": "Run a marathon",
+      "goalRead": "Read 20 books",
+      "entry": "Morning 8 km, great pace.",
+      "ovPeriod": "JUL 14–20",
+      "ovHeadline": "A strong week of running",
+      "ovBody": "5 runs, ★4.2 on average."
+    },
+    "steps": {
+      "welcome": {
+        "title": "Welcome to Litopys",
+        "desc": "20 seconds — here's the gist)"
+      },
+      "newGoal": {
+        "title": "Add a goal",
+        "desc": "Tap “＋ New goal” to create something you're working toward."
+      },
+      "record": {
+        "title": "Record an entry",
+        "desc": "Tap a goal on Today to quickly log today's progress."
+      },
+      "manage": {
+        "title": "Manage your goals",
+        "desc": "“Manage goals” groups everything by status: active, completed, postponed."
+      },
+      "history": {
+        "title": "A goal's history",
+        "desc": "Inside each goal is a timeline of all your entries and stats."
+      },
+      "overview": {
+        "title": "Weekly overview",
+        "desc": "The Overview tab summarizes your progress every week."
+      },
+      "done": {
+        "title": "You're all set!",
+        "desc": "Now try it yourself: add an entry, open a goal, browse the tabs."
+      }
+    }
+  },
+  "goalDetail": {
+    "edit": "Edit",
+    "entriesLabel": "entries",
+    "avgLabel": "avg ★",
+    "streakLabel": "day streak",
+    "historyLabel": "ENTRY HISTORY",
+    "yesterday": "Yesterday",
+    "emptyHistory": "No entries yet"
   },
   "deadline": {
     "today": "Today",
@@ -20,17 +93,17 @@
     "overdue": "Overdue"
   },
   "notes": {
-    "title": "Notes",
-    "empty": "No notes yet",
     "entries_one": "{{count}} entry",
-    "entries_other": "{{count}} entries",
-    "noEntries": "No entries for this day"
+    "entries_other": "{{count}} entries"
   },
   "summary": {
     "title": "Reports",
     "weeks": "Weeks",
     "months": "Months",
     "years": "Years",
+    "weekTab": "Week",
+    "monthTab": "Month",
+    "yearTab": "Year",
     "noReports": "No saved reports",
     "activeDays_one": "{{count}} active day",
     "activeDays_other": "{{count}} active days"
@@ -51,12 +124,12 @@
     "errorCode": "Invalid or expired code."
   },
   "profile": {
-    "myGoals": "My goals",
-    "noGoals": "No goals yet",
     "logout": "Log out",
-    "notifications": "Reminders",
-    "reminderTime": "Daily reminder time",
-    "dataPrivacy": "Data & privacy",
+    "settingsSection": "Settings",
+    "editProfile": "Profile settings",
+    "reminderTime": "Reminders",
+    "reportLanguage": "Report language",
+    "retakeTour": "Retake the tour",
     "exportData": "Export my data (JSON)",
     "privacyPolicy": "Privacy policy",
     "deleteAccount": "Delete account",
@@ -67,15 +140,10 @@
     "deleteError": "Failed to delete account. Please try again.",
     "exportError": "Failed to export data. Please try again.",
     "exportSaved": "Your data has been exported.",
-    "groups": {
-      "active": "Active",
-      "finished": "Completed",
-      "postpone": "Archive"
-    },
-    "status": {
-      "active": "Active",
-      "finished": "Completed",
-      "postpone": "Postponed"
+    "stats": {
+      "entries": "entries",
+      "streak": "day streak",
+      "avg": "avg ★"
     }
   },
   "privacy": {
@@ -110,7 +178,6 @@
     "nameLabel": "Name",
     "namePlaceholder": "Name",
     "appLanguageLabel": "App language",
-    "languageLabel": "Report language",
     "genderLabel": "Gender",
     "birthYearLabel": "Year of birth (optional)",
     "birthYearPlaceholder": "e.g. 1999",
@@ -122,6 +189,10 @@
     "errorSave": "Failed to save. Please try again."
   },
   "goal": {
+    "detailTitle": "Goal",
+    "newTitle": "New goal",
+    "newSubtitle": "What do you want to do regularly?",
+    "create": "Create goal",
     "titleLabel": "Goal title",
     "titlePlaceholder": "E.g. Run a marathon",
     "descLabel": "Description",
@@ -147,21 +218,18 @@
     }
   },
   "entry": {
+    "new": "New entry",
     "noteLabel": "What did you do today?",
     "notePlaceholder": "Write here...",
     "scoreLabel": "Progress feeling",
     "save": "Save",
+    "cancel": "Cancel",
     "errorEmpty": "Please write a note",
     "errorSave": "Failed to save"
   },
   "notifications": {
     "dailyTitle": "Time for a note ✍️",
     "dailyBody": "Write down what you did for your goals today."
-  },
-  "nav": {
-    "newGoal": "New goal",
-    "addNote": "Add note",
-    "notesList": "Notes"
   },
   "languageSelect": {
     "searchPlaceholder": "Search language…",

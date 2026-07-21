@@ -26,9 +26,9 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-        <Stack.Screen name="goal" options={{ title: t('nav.newGoal') }} />
-        <Stack.Screen name="goal/[id]" options={{ title: t('nav.addNote') }} />
-        <Stack.Screen name="notes/[id]" options={{ title: t('nav.notesList') }} />
+        <Stack.Screen name="goal/[id]" options={{ title: t('goal.detailTitle') }} />
+        <Stack.Screen name="goals" options={{ title: t('goals.title') }} />
+        <Stack.Screen name="tour" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="privacy" options={{ title: t('profile.privacyPolicy') }} />
       </Stack>
     </SQLiteProvider>

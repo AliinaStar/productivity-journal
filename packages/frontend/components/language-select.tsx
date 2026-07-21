@@ -2,17 +2,17 @@ import { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, FlatList, Pressable } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
-interface Props {
-  /** Currently selected value (one of the provided options). */
+interface ModalProps {
+  visible: boolean;
   value: string;
   options: readonly string[];
-  onChange: (value: string) => void;
+  onSelect: (value: string) => void;
+  onClose: () => void;
 }
 
-/** A searchable dropdown for picking one value from a long list (e.g. report language). */
-export function LanguageSelect({ value, options, onChange }: Props) {
+/** The searchable picker sheet on its own, so callers can trigger it from any UI. */
+export function LanguagePickerModal({ visible, value, options, onSelect, onClose }: ModalProps) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
@@ -22,14 +22,60 @@ export function LanguageSelect({ value, options, onChange }: Props) {
   }, [query, options]);
 
   function close() {
-    setOpen(false);
     setQuery('');
+    onClose();
   }
 
   function select(option: string) {
-    onChange(option);
-    close();
+    setQuery('');
+    onSelect(option);
   }
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
+      <Pressable style={s.backdrop} onPress={close}>
+        <Pressable style={s.sheet} onPress={() => {}}>
+          <View style={s.handle} />
+          <TextInput
+            style={s.search}
+            placeholder={t('languageSelect.searchPlaceholder')}
+            placeholderTextColor="#B4B2A9"
+            value={query}
+            onChangeText={setQuery}
+            autoCorrect={false}
+            autoFocus
+          />
+          <FlatList
+            data={filtered}
+            keyExtractor={item => item}
+            keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={<Text style={s.empty}>{t('languageSelect.empty')}</Text>}
+            renderItem={({ item }) => {
+              const selected = item === value;
+              return (
+                <TouchableOpacity style={s.row} onPress={() => select(item)} activeOpacity={0.7}>
+                  <Text style={[s.rowText, selected && s.rowTextSelected]}>{item}</Text>
+                  {selected && <Text style={s.check}>✓</Text>}
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+interface Props {
+  /** Currently selected value (one of the provided options). */
+  value: string;
+  options: readonly string[];
+  onChange: (value: string) => void;
+}
+
+/** A searchable dropdown field for picking one value from a long list. */
+export function LanguageSelect({ value, options, onChange }: Props) {
+  const [open, setOpen] = useState(false);
 
   return (
     <>
@@ -38,37 +84,13 @@ export function LanguageSelect({ value, options, onChange }: Props) {
         <Text style={s.chevron}>▾</Text>
       </TouchableOpacity>
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={close}>
-        <Pressable style={s.backdrop} onPress={close}>
-          <Pressable style={s.sheet} onPress={() => {}}>
-            <View style={s.handle} />
-            <TextInput
-              style={s.search}
-              placeholder={t('languageSelect.searchPlaceholder')}
-              placeholderTextColor="#B4B2A9"
-              value={query}
-              onChangeText={setQuery}
-              autoCorrect={false}
-              autoFocus
-            />
-            <FlatList
-              data={filtered}
-              keyExtractor={item => item}
-              keyboardShouldPersistTaps="handled"
-              ListEmptyComponent={<Text style={s.empty}>{t('languageSelect.empty')}</Text>}
-              renderItem={({ item }) => {
-                const selected = item === value;
-                return (
-                  <TouchableOpacity style={s.row} onPress={() => select(item)} activeOpacity={0.7}>
-                    <Text style={[s.rowText, selected && s.rowTextSelected]}>{item}</Text>
-                    {selected && <Text style={s.check}>✓</Text>}
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <LanguagePickerModal
+        visible={open}
+        value={value}
+        options={options}
+        onSelect={v => { onChange(v); setOpen(false); }}
+        onClose={() => setOpen(false)}
+      />
     </>
   );
 }
