@@ -150,11 +150,8 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingTop: insets.top + 14 }]}>
+    <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingTop: insets.top + 32 }]}>
       <View style={s.header}>
-        <View style={s.avatar}>
-          <Text style={s.avatarText}>👤</Text>
-        </View>
         <Text style={s.name}>{profile?.name || '—'}</Text>
         <Text style={s.meta}>{profile?.email ?? ''}</Text>
       </View>
@@ -240,8 +237,6 @@ const s = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#F5F4F0' },
   content: { padding: 20, paddingBottom: 40 },
   header: { alignItems: 'center', marginBottom: 18 },
-  avatar: { width: 66, height: 66, borderRadius: 33, backgroundColor: '#EEEDFE', justifyContent: 'center', alignItems: 'center', marginBottom: 9 },
-  avatarText: { fontSize: 30 },
   name: { fontSize: 19, fontWeight: '800', color: '#26215C', marginBottom: 1 },
   meta: { fontSize: 12, color: '#928F87' },
 
