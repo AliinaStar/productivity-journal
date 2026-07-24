@@ -204,6 +204,11 @@ export default function ProfileScreen() {
           <Text style={s.rowChevron}>›</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={[s.row, s.rowDivider, s.rowBetween]} onPress={() => router.push('/feedback')} activeOpacity={0.7}>
+          <Text style={s.rowText}>{t('profile.contactUs')}</Text>
+          <Text style={s.rowChevron}>›</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={[s.row, s.rowDivider, s.rowBetween]} onPress={() => router.push('/privacy')} activeOpacity={0.7}>
           <Text style={s.rowText}>{t('profile.privacyPolicy')}</Text>
           <Text style={s.rowChevron}>›</Text>

@@ -26,6 +26,7 @@ from src.rag.embeddings import preload_embedding_model
 from src.rag.scheduler import register_jobs, scheduler
 from src.routes.auth import router as auth_router
 from src.routes.entries import router as entries_router
+from src.routes.feedback import router as feedback_router
 from src.routes.goals import router as goals_router
 from src.routes.health import router as health_router
 from src.routes.reports import router as reports_router
@@ -122,5 +123,6 @@ def create_app() -> FastAPI:
     app.include_router(entries_router)
     app.include_router(reports_router)
     app.include_router(users_router)
+    app.include_router(feedback_router)
 
     return app

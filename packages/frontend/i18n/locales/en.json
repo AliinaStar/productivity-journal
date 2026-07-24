@@ -130,6 +130,7 @@
     "reminderTime": "Reminders",
     "reportLanguage": "Report language",
     "retakeTour": "Retake the tour",
+    "contactUs": "Contact us",
     "exportData": "Export my data (JSON)",
     "privacyPolicy": "Privacy policy",
     "deleteAccount": "Delete account",
@@ -148,6 +149,16 @@
   },
   "privacy": {
     "title": "Privacy policy"
+  },
+  "feedback": {
+    "title": "Contact us",
+    "intro": "Something not working, or an idea to make Litopys better? Write to us — we read every message.",
+    "placeholder": "Describe the problem or your idea…",
+    "send": "Send",
+    "sentTitle": "Thank you!",
+    "sentBody": "Your message has been sent. We'll get back to you if needed.",
+    "errorTitle": "Couldn't send",
+    "errorBody": "Failed to send your message. Please check your connection and try again."
   },
   "onboarding": {
     "title": "Tell us about yourself",

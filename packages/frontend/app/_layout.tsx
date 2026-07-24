@@ -30,6 +30,7 @@ export default function RootLayout() {
         <Stack.Screen name="goals" options={{ title: t('goals.title') }} />
         <Stack.Screen name="tour" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="privacy" options={{ title: t('profile.privacyPolicy') }} />
+        <Stack.Screen name="feedback" options={{ title: t('feedback.title') }} />
       </Stack>
     </SQLiteProvider>
   );

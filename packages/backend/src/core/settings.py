@@ -61,6 +61,8 @@ class AppSettings(BaseSettings):
     # Email (Resend)
     resend_api_key: str = ""
     email_from: str = "noreply@yourdomain.com"
+    # Inbox that in-app feedback is delivered to. Falls back to email_from when unset.
+    feedback_to: str = ""
 
     # Auth (JWT)
     jwt_secret: str = ""
