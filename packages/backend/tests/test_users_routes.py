@@ -28,30 +28,28 @@ def test_patch_me_updates_fields(client, make_user):
     assert data["gender"] == "female"
 
 
-def test_patch_me_sets_birth_year(client, make_user):
+def test_patch_me_sets_age_group(client, make_user):
     user = make_user()
     res = client.patch(
-        "/users/me", json={"birth_year": 1999}, headers=user["headers"]
+        "/users/me", json={"age_group": "25-34"}, headers=user["headers"]
     )
     assert res.status_code == 200
-    assert res.json()["birth_year"] == 1999
+    assert res.json()["age_group"] == "25-34"
 
 
-def test_patch_me_rejects_future_birth_year(client, make_user):
-    from datetime import datetime, timezone
-
+def test_patch_me_rejects_unknown_age_group(client, make_user):
     user = make_user()
-    future = datetime.now(timezone.utc).year + 1
     res = client.patch(
-        "/users/me", json={"birth_year": future}, headers=user["headers"]
+        "/users/me", json={"age_group": "40-50"}, headers=user["headers"]
     )
     assert res.status_code == 422
 
 
-def test_patch_me_rejects_too_old_birth_year(client, make_user):
+def test_patch_me_rejects_under_13_age_group(client, make_user):
+    # There is no under-13 bucket; the API must reject any attempt to send one.
     user = make_user()
     res = client.patch(
-        "/users/me", json={"birth_year": 1800}, headers=user["headers"]
+        "/users/me", json={"age_group": "0-12"}, headers=user["headers"]
     )
     assert res.status_code == 422
 

@@ -9,6 +9,7 @@ import { REPORT_LANGUAGES } from '@/utils/reportLanguages';
 import { LanguageSelect } from '@/components/language-select';
 
 const GENDER_KEYS = ['female', 'male', 'unspecified'] as const;
+const AGE_GROUPS = ['13-17', '18-24', '25-34', '35-44', '45-54', '55+'] as const;
 
 export default function OnboardingScreen() {
   const { t, i18n } = useTranslation();
@@ -16,24 +17,14 @@ export default function OnboardingScreen() {
   const [name, setName] = useState('');
   const [language, setLanguage] = useState('Ukrainian');
   const [gender, setGender] = useState('unspecified');
-  const [birthYear, setBirthYear] = useState('');
+  const [ageGroup, setAgeGroup] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
     if (!name.trim()) { setError(t('onboarding.errorName')); return; }
-    // Optional. Empty -> null (column left unset); if filled it must be a
-    // plausible year. The same bound is re-checked server-side.
-    let birthYearValue: number | null = null;
-    if (birthYear.trim()) {
-      const n = Number(birthYear.trim());
-      if (!Number.isInteger(n) || n < 1900 || n > new Date().getFullYear()) {
-        setError(t('onboarding.errorBirthYear'));
-        return;
-      }
-      birthYearValue = n;
-    }
+    if (!ageGroup) { setError(t('onboarding.errorAgeGroup')); return; }
     if (!consent) { setError(t('onboarding.consentRequired')); return; }
     setLoading(true);
     setError(null);
@@ -41,7 +32,7 @@ export default function OnboardingScreen() {
       const res = await apiFetch('/users/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), language, gender, birth_year: birthYearValue }),
+        body: JSON.stringify({ name: name.trim(), language, gender, age_group: ageGroup }),
       });
       if (!res.ok) throw new Error();
       await apiFetch('/users/me/consent', { method: 'POST' });
@@ -90,8 +81,15 @@ export default function OnboardingScreen() {
         ))}
       </View>
 
-      <Text style={s.label}>{t('onboarding.birthYearLabel')}</Text>
-      <TextInput style={s.input} placeholder={t('onboarding.birthYearPlaceholder')} placeholderTextColor="#B4B2A9" value={birthYear} onChangeText={setBirthYear} keyboardType="number-pad" maxLength={4} />
+      <Text style={s.label}>{t('onboarding.ageGroupLabel')}</Text>
+      <Text style={s.hint}>{t('onboarding.ageGroupHint')}</Text>
+      <View style={s.chips}>
+        {AGE_GROUPS.map(g => (
+          <TouchableOpacity key={g} style={[s.chip, ageGroup === g && s.chipSelected]} onPress={() => setAgeGroup(g)} activeOpacity={0.7}>
+            <Text style={[s.chipText, ageGroup === g && s.chipTextSelected]}>{g}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       <TouchableOpacity style={s.consentRow} onPress={() => setConsent(c => !c)} activeOpacity={0.7}>
         <View style={[s.checkbox, consent && s.checkboxOn]}>
@@ -118,6 +116,7 @@ const s = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '700', color: '#26215C', marginBottom: 6 },
   sub: { fontSize: 14, color: '#888780', marginBottom: 36 },
   label: { fontSize: 13, fontWeight: '600', color: '#888780', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
+  hint: { fontSize: 12, color: '#888780', lineHeight: 16, marginTop: -4, marginBottom: 12 },
   input: { backgroundColor: '#fff', borderRadius: 12, padding: 14, fontSize: 15, marginBottom: 28, color: '#2C2C2A' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 28 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#E5E4DF' },

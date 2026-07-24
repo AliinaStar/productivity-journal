@@ -6,12 +6,13 @@ import { apiFetch } from '@/api-client/client';
 import { APP_LANGUAGES, APP_LANGUAGE_LABELS, AppLanguage, setAppLanguage } from '@/utils/locale';
 
 const GENDER_KEYS = ['female', 'male', 'unspecified'] as const;
+const AGE_GROUPS = ['13-17', '18-24', '25-34', '35-44', '45-54', '55+'] as const;
 
 export default function SettingsScreen() {
   const { t, i18n } = useTranslation();
   const [name, setName] = useState('');
   const [gender, setGender] = useState('unspecified');
-  const [birthYear, setBirthYear] = useState('');
+  const [ageGroup, setAgeGroup] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +25,7 @@ export default function SettingsScreen() {
         const data = await res.json();
         setName(data.name ?? '');
         setGender(data.gender ?? 'unspecified');
-        setBirthYear(data.birth_year != null ? String(data.birth_year) : '');
+        setAgeGroup(data.age_group ?? null);
       } catch {
         setError(t('settings.errorLoad'));
       } finally {
@@ -36,24 +37,13 @@ export default function SettingsScreen() {
 
   async function handleSave() {
     if (!name.trim()) { setError(t('settings.errorName')); return; }
-    // Optional. Empty -> null (backend leaves the column untouched). If filled,
-    // it must be a plausible year; the same bound is re-checked server-side.
-    let birthYearValue: number | null = null;
-    if (birthYear.trim()) {
-      const n = Number(birthYear.trim());
-      if (!Number.isInteger(n) || n < 1900 || n > new Date().getFullYear()) {
-        setError(t('settings.errorBirthYear'));
-        return;
-      }
-      birthYearValue = n;
-    }
     setSaving(true);
     setError(null);
     try {
       const res = await apiFetch('/users/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), gender, birth_year: birthYearValue }),
+        body: JSON.stringify({ name: name.trim(), gender, age_group: ageGroup }),
       });
       if (!res.ok) throw new Error();
       router.back();
@@ -93,8 +83,14 @@ export default function SettingsScreen() {
         ))}
       </View>
 
-      <Text style={s.label}>{t('settings.birthYearLabel')}</Text>
-      <TextInput style={s.input} placeholder={t('settings.birthYearPlaceholder')} placeholderTextColor="#B4B2A9" value={birthYear} onChangeText={setBirthYear} keyboardType="number-pad" maxLength={4} />
+      <Text style={s.label}>{t('settings.ageGroupLabel')}</Text>
+      <View style={s.chips}>
+        {AGE_GROUPS.map(g => (
+          <TouchableOpacity key={g} style={[s.chip, ageGroup === g && s.chipSelected]} onPress={() => setAgeGroup(g)} activeOpacity={0.7}>
+            <Text style={[s.chipText, ageGroup === g && s.chipTextSelected]}>{g}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       {error && <Text style={s.error}>{error}</Text>}
 

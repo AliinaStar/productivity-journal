@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,20 +16,14 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 # Field limits mirror the DB columns (user.name String(100), user.language
 # String(50), user.gender enum) so bad input fails with 422, not a DB error.
+AgeGroup = Literal["13-17", "18-24", "25-34", "35-44", "45-54", "55+"]
+
+
 class UpdateProfileRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     language: str | None = Field(default=None, max_length=50)
     gender: Literal["male", "female", "unspecified"] | None = None
-    # Lower bound mirrors the DB CHECK. The upper bound ("not from the future")
-    # depends on the current year, so it lives here rather than in the column.
-    birth_year: int | None = Field(default=None, ge=1900)
-
-    @field_validator("birth_year")
-    @classmethod
-    def _not_in_future(cls, v: int | None) -> int | None:
-        if v is not None and v > datetime.now(timezone.utc).year:
-            raise ValueError("birth_year cannot be in the future")
-        return v
+    age_group: AgeGroup | None = None
 
 
 class PushTokenRequest(BaseModel):
@@ -43,7 +37,7 @@ class ProfileResponse(BaseModel):
     email: str
     language: str
     gender: str | None
-    birth_year: int | None
+    age_group: str | None
     consent_at: str | None
 
 
@@ -54,7 +48,7 @@ def _profile(user: User) -> ProfileResponse:
         email=user.email,
         language=user.language,
         gender=user.gender,
-        birth_year=user.birth_year,
+        age_group=user.age_group,
         consent_at=user.consent_at.isoformat() if user.consent_at else None,
     )
 
@@ -80,8 +74,8 @@ async def update_profile(
         current_user.language = body.language
     if body.gender is not None:
         current_user.gender = body.gender
-    if body.birth_year is not None:
-        current_user.birth_year = body.birth_year
+    if body.age_group is not None:
+        current_user.age_group = body.age_group
 
     await session.commit()
     await session.refresh(current_user)
@@ -139,7 +133,7 @@ async def export_data(
             "email": current_user.email,
             "language": current_user.language,
             "gender": current_user.gender,
-            "birth_year": current_user.birth_year,
+            "age_group": current_user.age_group,
             "consent_at": current_user.consent_at.isoformat() if current_user.consent_at else None,
         },
         "goals": [

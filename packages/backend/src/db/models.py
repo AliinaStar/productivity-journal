@@ -148,14 +148,6 @@ class RefreshToken(Base):
 
 class User(Base):
     __tablename__ = "user"
-    __table_args__ = (
-        # Static sanity guard against garbage years. The tight "not from the
-        # future" upper bound lives in the API layer instead, because it
-        # depends on the current year and a Postgres CHECK must be immutable.
-        CheckConstraint(
-            "birth_year BETWEEN 1900 AND 2100", name="check_birth_year"
-        ),
-    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
@@ -165,7 +157,12 @@ class User(Base):
         Enum("male", "female", "unspecified", name="gender"),
         nullable=True
     )
-    birth_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Coarse age range instead of an exact birth year. The
+    # lowest bucket starts at 13:  (see privacy policy §7).
+    age_group: Mapped[str | None] = mapped_column(
+        Enum("13-17", "18-24", "25-34", "35-44", "45-54", "55+", name="age_group"),
+        nullable=True,
+    )
     # Timestamp at which the user accepted the privacy policy (GDPR consent).
     consent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Expo push token of the user's most recent device (ExponentPushToken[...]).
