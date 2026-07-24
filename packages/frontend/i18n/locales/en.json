@@ -147,8 +147,7 @@
     }
   },
   "privacy": {
-    "title": "Privacy policy",
-    "body": "Litopys stores the goals, notes and productivity scores you enter so it can show them back to you and generate periodic reports.\n\nWhat we store: your email (for sign-in), your profile (name, language, gender), and your journal data (goals, notes, reports).\n\nAI processing: to generate reports, the text of your notes is sent to OpenAI for summarisation. Do not write anything you would not want processed by a third-party AI provider.\n\nYour rights: you can export all of your data as JSON, and you can delete your account and all associated data at any time from the Profile screen.\n\nThis is a student project; this text is a plain-language summary and not formal legal advice."
+    "title": "Privacy policy"
   },
   "onboarding": {
     "title": "Tell us about yourself",

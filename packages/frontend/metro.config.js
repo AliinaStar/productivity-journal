@@ -18,4 +18,9 @@ config.resolver.nodeModulesPaths = [
 
 config.resolver.platforms = ['ios', 'android', 'web'];
 
+// Bundle Markdown files as plain strings (see md-transformer.js) so the privacy
+// policy can be imported straight from docs/privacy-policy.md.
+config.transformer.babelTransformerPath = require.resolve('./md-transformer.js');
+config.resolver.sourceExts.push('md');
+
 module.exports = config;
