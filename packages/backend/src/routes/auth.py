@@ -125,6 +125,13 @@ async def send_code(
     unused codes for the same email. Always returns 200 regardless of whether
     the email is registered (security: do not reveal account existence).
     """
+    settings = get_settings()
+    if settings.review_email and body.email.lower() == settings.review_email.lower():
+        # Store-review account: no code is generated or emailed; verify-code
+        # accepts the fixed REVIEW_CODE. Return 200 so the client advances to
+        # the code-entry screen just like a normal send.
+        return SendCodeResponse(detail="Code sent to your email.")
+
     code = _generate_code()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
@@ -165,7 +172,21 @@ async def verify_code(
         400: Invalid, expired, already used, or too-many-attempts code.
     """
     now = datetime.now(timezone.utc)
-    max_attempts = get_settings().otp_max_attempts
+    settings = get_settings()
+    max_attempts = settings.otp_max_attempts
+
+    # Store-review account: a single configured email logs in with a fixed code,
+    # bypassing OTP entirely. Disabled unless both env vars are set.
+    if (
+        settings.review_email
+        and settings.review_code
+        and body.email.lower() == settings.review_email.lower()
+        and secrets.compare_digest(body.code, settings.review_code)
+    ):
+        user, is_new = await _get_or_create_user(session, body.email)
+        tokens = await _issue_tokens(session, user, is_new)
+        await session.commit()
+        return tokens
 
     # Latest unused code for this email (regardless of the submitted value),
     # so a wrong guess increments that code's attempt counter.

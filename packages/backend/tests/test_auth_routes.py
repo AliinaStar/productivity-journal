@@ -105,6 +105,96 @@ def test_verify_code_used_code_rejected(client, insert_auth_code):
     assert res.status_code == 400
 
 
+# ---- store-review account ---------------------------------------------------
+# A single email configured via REVIEW_EMAIL/REVIEW_CODE logs in with a fixed
+# code, bypassing OTP, so an app-store reviewer can sign in without access to
+# any inbox. This is a real authentication bypass, so the tests care most
+# about the *disabled* state: unless both env vars are set, this email must
+# behave exactly like any other.
+
+def test_review_account_disabled_by_default(client, db):
+    """The bypass must be off unless both settings are explicitly configured —
+    this is what makes it safe to ship in the default/empty-env case."""
+    res = client.post("/auth/send-code", json={"email": "review@example.com"})
+    assert res.status_code == 200
+    row = db.execute(
+        "SELECT used FROM auth_code WHERE email = %s", ("review@example.com",)
+    ).fetchone()
+    # A real code was generated and stored, same as any other email — the
+    # request was not shortcut.
+    assert row is not None
+
+    verify = client.post(
+        "/auth/verify-code", json={"email": "review@example.com", "code": "000000"}
+    )
+    assert verify.status_code == 400
+
+
+def test_review_account_logs_in_with_fixed_code(client, db, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "review_email", "review@example.com")
+    monkeypatch.setattr(settings, "review_code", "837412")
+
+    send = client.post("/auth/send-code", json={"email": "review@example.com"})
+    assert send.status_code == 200
+    # No AuthCode row: no code was ever generated or emailed for this address.
+    row = db.execute(
+        "SELECT 1 FROM auth_code WHERE email = %s", ("review@example.com",)
+    ).fetchone()
+    assert row is None
+
+    verify = client.post(
+        "/auth/verify-code", json={"email": "review@example.com", "code": "837412"}
+    )
+    assert verify.status_code == 200
+    assert verify.json()["user_id"] is not None
+
+
+def test_review_account_rejects_wrong_code(client, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "review_email", "review@example.com")
+    monkeypatch.setattr(settings, "review_code", "837412")
+
+    res = client.post(
+        "/auth/verify-code", json={"email": "review@example.com", "code": "000000"}
+    )
+    assert res.status_code == 400
+
+
+def test_review_account_is_case_insensitive_on_email(client, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "review_email", "review@example.com")
+    monkeypatch.setattr(settings, "review_code", "837412")
+
+    res = client.post(
+        "/auth/verify-code", json={"email": "Review@Example.com", "code": "837412"}
+    )
+    assert res.status_code == 200
+
+
+def test_review_account_ignored_when_only_email_is_set(client, db, monkeypatch):
+    """Both settings must be present — a half-configured bypass (e.g. one env
+    var set by mistake) must not silently open the door."""
+    monkeypatch.setattr(get_settings(), "review_email", "review@example.com")
+
+    res = client.post(
+        "/auth/verify-code", json={"email": "review@example.com", "code": "anything"}
+    )
+    assert res.status_code == 400
+
+
+def test_review_account_does_not_affect_other_emails(client, db, insert_auth_code, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "review_email", "review@example.com")
+    monkeypatch.setattr(settings, "review_code", "837412")
+
+    insert_auth_code("someone-else@example.com", "123456")
+    res = client.post(
+        "/auth/verify-code", json={"email": "someone-else@example.com", "code": "123456"}
+    )
+    assert res.status_code == 200
+
+
 # ---- refresh ---------------------------------------------------------------
 
 def test_refresh_returns_working_access_token(client, make_user):

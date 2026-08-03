@@ -71,6 +71,13 @@ class AppSettings(BaseSettings):
     refresh_token_expire_days: int = 30
     otp_max_attempts: int = 5
 
+    # Store-review test account. When both are set, this single email logs in
+    # with a fixed code (no email is sent, no OTP is checked) so app-store
+    # reviewers can access the app without inbox access. Leave BOTH empty in
+    # normal operation — empty disables the bypass entirely.
+    review_email: str = ""
+    review_code: str = ""
+
     # Langfuse
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
