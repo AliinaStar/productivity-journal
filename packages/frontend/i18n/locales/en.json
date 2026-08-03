@@ -13,7 +13,9 @@
     "addEntry": "Add another entry",
     "newGoal": "New goal",
     "manageGoals": "Manage goals",
-    "empty": "No active goals.\nTap “New goal” to add one."
+    "empty": "No active goals.\nTap “New goal” to add one.",
+    "selectGoal": "Select a goal on the left",
+    "selectGoalSub": "Its entry history and stats will appear here"
   },
   "goals": {
     "title": "My goals",
@@ -233,7 +235,15 @@
     "save": "Save",
     "cancel": "Cancel",
     "errorEmpty": "Please write a note",
-    "errorSave": "Failed to save"
+    "errorSave": "Failed to save",
+    "editTitle": "Edit entry",
+    "edit": "Edit",
+    "edited": "edited",
+    "delete": "Delete",
+    "editableUntil": "editable until {{date}}",
+    "deleteTitle": "Delete this entry?",
+    "deleteMessage": "The entry will be permanently deleted.",
+    "deleteConfirm": "Delete"
   },
   "notifications": {
     "dailyTitle": "Time for a note ✍️",

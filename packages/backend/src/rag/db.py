@@ -8,7 +8,7 @@ from collections import defaultdict
 from datetime import date as date_type, date
 
 import numpy as np
-from sqlalchemy import extract, func, select
+from sqlalchemy import extract, func, select, tuple_
 from sqlalchemy.orm import contains_eager
 
 from src.db.models import Entry, Goal, Report, User
@@ -78,6 +78,28 @@ async def report_exists(user_id: int, period: str, period_start: date_type) -> b
             .limit(1)
         )
         return result.first() is not None
+
+
+async def existing_report_keys(
+    periods: set[tuple[str, date_type]],
+) -> set[tuple[int, str, date_type]]:
+    """Which ``(user_id, period, period_start)`` reports already exist.
+
+    The batched form of :func:`report_exists`. The hourly scheduler asks this
+    once per tick instead of once per user per period — with the periods being
+    the same handful of ``(period, period_start)`` pairs for everybody, that is
+    one query rather than three per user every hour.
+    """
+    if not periods:
+        return set()
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        result = await session.execute(
+            select(Report.user_id, Report.period, Report.period_start).where(
+                tuple_(Report.period, Report.period_start).in_(list(periods))
+            )
+        )
+        return {(row.user_id, row.period, row.period_start) for row in result}
 
 
 async def count_entries(period: str, date: DateDict, user_id: int) -> int:

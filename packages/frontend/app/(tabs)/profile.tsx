@@ -151,6 +151,7 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView style={s.scroll} contentContainerStyle={[s.content, { paddingTop: insets.top + 32 }]}>
+      <View style={s.inner}>
       <View style={s.header}>
         <Text style={s.name}>{profile?.name || '—'}</Text>
         <Text style={s.meta}>{profile?.email ?? ''}</Text>
@@ -234,6 +235,7 @@ export default function ProfileScreen() {
         onSelect={saveReportLanguage}
         onClose={() => setLangPickerOpen(false)}
       />
+      </View>
     </ScrollView>
   );
 }
@@ -241,6 +243,7 @@ export default function ProfileScreen() {
 const s = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#F5F4F0' },
   content: { padding: 20, paddingBottom: 40 },
+  inner: { width: '100%', maxWidth: 720, alignSelf: 'center' },
   header: { alignItems: 'center', marginBottom: 18 },
   name: { fontSize: 19, fontWeight: '800', color: '#26215C', marginBottom: 1 },
   meta: { fontSize: 12, color: '#928F87' },

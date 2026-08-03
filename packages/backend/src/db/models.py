@@ -168,6 +168,12 @@ class User(Base):
     # Expo push token of the user's most recent device (ExponentPushToken[...]).
     # NULL when the user never granted notification permissions.
     expo_push_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # IANA zone name reported by the device ("Europe/Kyiv"). Decides when a
+    # week ends for this user, which in turn decides both how long an entry
+    # stays editable and when their reports are generated (see
+    # ``src/core/periods.py``). NULL — for accounts that predate the column or
+    # clients that have not synced yet — is read as UTC, the previous behaviour.
+    timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     reports: Mapped[list["Report"]] = relationship(back_populates="user")
     goals: Mapped[list['Goal']] = relationship(back_populates="user")

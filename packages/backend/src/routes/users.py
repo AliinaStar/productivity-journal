@@ -4,11 +4,12 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.dependencies import get_current_user, get_db
+from src.core.periods import is_known_timezone
 from src.db.models import AuthCode, Entry, Goal, RefreshToken, Report, User
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -24,6 +25,22 @@ class UpdateProfileRequest(BaseModel):
     language: str | None = Field(default=None, max_length=50)
     gender: Literal["male", "female", "unspecified"] | None = None
     age_group: AgeGroup | None = None
+    # IANA zone reported by the device, e.g. "Europe/Kyiv". The client sends it
+    # on every sync so a user who moves keeps getting correct week boundaries.
+    timezone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def _check_timezone(cls, value: str | None) -> str | None:
+        """Reject zones this server cannot resolve.
+
+        Storing one would be worse than storing nothing: ``resolve_tz`` falls
+        back to UTC either way, but a bad value looks authoritative in the DB
+        and hides the fact that the device never reported a usable zone.
+        """
+        if value is not None and not is_known_timezone(value):
+            raise ValueError(f"Unknown IANA timezone: {value!r}")
+        return value
 
 
 class PushTokenRequest(BaseModel):
@@ -39,6 +56,7 @@ class ProfileResponse(BaseModel):
     gender: str | None
     age_group: str | None
     consent_at: str | None
+    timezone: str | None
 
 
 def _profile(user: User) -> ProfileResponse:
@@ -50,6 +68,7 @@ def _profile(user: User) -> ProfileResponse:
         gender=user.gender,
         age_group=user.age_group,
         consent_at=user.consent_at.isoformat() if user.consent_at else None,
+        timezone=user.timezone,
     )
 
 
@@ -76,6 +95,8 @@ async def update_profile(
         current_user.gender = body.gender
     if body.age_group is not None:
         current_user.age_group = body.age_group
+    if body.timezone is not None:
+        current_user.timezone = body.timezone
 
     await session.commit()
     await session.refresh(current_user)
@@ -135,6 +156,7 @@ async def export_data(
             "gender": current_user.gender,
             "age_group": current_user.age_group,
             "consent_at": current_user.consent_at.isoformat() if current_user.consent_at else None,
+            "timezone": current_user.timezone,
         },
         "goals": [
             {
@@ -155,6 +177,7 @@ async def export_data(
                 "note": e.note,
                 "productivity_score": e.productivity_score,
                 "created_at": e.created_at.isoformat() if e.created_at else None,
+                "updated_at": e.updated_at.isoformat() if e.updated_at else None,
             }
             for e in entries
         ],

@@ -7,7 +7,9 @@ import { useSyncMeta } from '@/db/sync';
 import * as GoalsApi from '@/api-client/goals';
 import * as EntriesApi from '@/api-client/entries';
 import * as ReportsApi from '@/api-client/reports';
-import { PeriodType } from '@/db/types';
+import * as UsersApi from '@/api-client/users';
+import { ApiError } from '@/api-client/client';
+import { Entry, PeriodType } from '@/db/types';
 import { toPeriodKey } from '@/utils/period';
 
 // Matches the backend's max page limit so offline sync stays complete.
@@ -42,10 +44,91 @@ export function useSync() {
     return userId;
   }
 
+  /**
+   * Report the device's timezone, but only when it actually changed.
+   *
+   * The server resolves week boundaries in this zone, so a stale value means
+   * entries lock at the wrong moment and reports arrive at the wrong hour.
+   * Best-effort: a failure here must never abort a sync that is carrying the
+   * user's actual writing.
+   */
+  async function pushTimezone(): Promise<void> {
+    const tz = UsersApi.deviceTimezone();
+    if (!tz) return;
+    if ((await syncMeta.getReportedTimezone()) === tz) return;
+    try {
+      await UsersApi.updateTimezone(tz);
+      await syncMeta.setReportedTimezone(tz);
+    } catch {
+      // Retried on the next sync.
+    }
+  }
+
+  /**
+   * Push one entry: a tombstone, an edit, or a brand-new row.
+   *
+   * A 403 means the entry's week closed before the change reached the server
+   * — offline on Sunday night, syncing on Monday. The change can never be
+   * accepted, so retrying it forever would wedge the queue behind a row that
+   * will always fail. The server's copy wins: the local change is abandoned
+   * and `pullEntries` restores what the backend actually holds.
+   */
+  async function pushEntry(entry: Entry): Promise<void> {
+    if (entry.deleted) {
+      if (!entry.remote_id) {
+        await entries.hardDelete(entry.id);
+        return;
+      }
+      try {
+        await EntriesApi.deleteEntry(entry.remote_id);
+        await entries.hardDelete(entry.id);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 403) {
+          // Too late to delete — bring the row back rather than hiding an
+          // entry locally that still exists (and is quoted in a report).
+          await entries.restore(entry.id);
+          return;
+        }
+        throw e;
+      }
+      return;
+    }
+
+    // Find the local goal to get its remote_id
+    const localGoal = await goals.getById(entry.goal_id);
+
+    if (!localGoal?.remote_id) {
+      // Goal wasn't synced yet — skip this entry for now
+      return;
+    }
+
+    if (entry.remote_id) {
+      // An edit to a row the server already has. Without this branch the
+      // entry would be POSTed a second time and duplicated on the backend.
+      try {
+        await EntriesApi.updateEntry(entry.remote_id, {
+          note: entry.note,
+          productivity_score: entry.productivity_score,
+          date_note: entry.date_note,
+        });
+      } catch (e) {
+        if (!(e instanceof ApiError) || e.status !== 403) throw e;
+      }
+      // Marked synced either way: on 403 the pull that follows overwrites the
+      // local row with the server's version, which is now the truth.
+      await entries.markSynced(entry.id, entry.remote_id);
+      return;
+    }
+
+    const remote = await EntriesApi.createEntry(entry, localGoal.remote_id);
+    await entries.markSynced(entry.id, remote.id);
+  }
+
   // Push local unsynced data → backend
   // Goals must go before entries (entries reference goal remote_id)
   async function pushChanges(): Promise<void> {
     await requireUserId();
+    await pushTimezone();
 
     // 1. Sync unsynced goals
     const unsyncedGoals = await goals.getUnsynced();
@@ -60,20 +143,11 @@ export function useSync() {
       }
     }
 
-    // 2. Sync unsynced entries
+    // 2. Sync unsynced entries — creates, edits and deletes
     const unsyncedEntries = await entries.getUnsynced();
 
     for (const entry of unsyncedEntries) {
-      // Find the local goal to get its remote_id
-      const localGoal = await goals.getById(entry.goal_id);
-
-      if (!localGoal?.remote_id) {
-        // Goal wasn't synced yet — skip this entry for now
-        continue;
-      }
-
-      const remote = await EntriesApi.createEntry(entry, localGoal.remote_id);
-      await entries.markSynced(entry.id, remote.id);
+      await pushEntry(entry);
     }
   }
 
@@ -170,11 +244,13 @@ export function useSync() {
       await entries.upsertFromRemote(remote, localGoal.id);
     }
 
-    // Remove local entries that no longer exist on the backend
+    // Remove local entries that no longer exist on the backend. hardDelete,
+    // not remove: the row is already gone server-side, so leaving a tombstone
+    // would queue a DELETE for something there is nothing left to delete.
     const localEntries = await entries.getAll();
     for (const local of localEntries) {
       if (local.remote_id && !remoteIds.has(local.remote_id)) {
-        await entries.remove(local.id);
+        await entries.hardDelete(local.id);
       }
     }
   }

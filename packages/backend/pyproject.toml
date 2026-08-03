@@ -27,6 +27,10 @@ dependencies = [
     "slowapi>=0.1.9",
     "structlog>=25.5.0",
     "httpx>=0.28.1",
+    # zoneinfo has no bundled tz database of its own: it reads the system one,
+    # which Windows does not have and slim containers do not always ship. This
+    # package is that database, so ZoneInfo("Europe/Kyiv") resolves everywhere.
+    "tzdata>=2026.1",
 ]
 
 [dependency-groups]

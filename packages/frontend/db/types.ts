@@ -22,6 +22,8 @@ export interface Entry {
   note: string;
   productivity_score: number; // 1–5
   created_at: string;    // ISO datetime
+  updated_at: string | null; // ISO datetime; null for rows never edited
+  deleted: number;       // 1 = tombstone awaiting a DELETE push
   synced: number;        // 0 = not synced, 1 = synced
 }
 
@@ -47,4 +49,7 @@ export const SYNC_KEYS = {
   LAST_SYNC_AT: 'last_sync_at',
   USER_REMOTE_ID: 'user_remote_id',
   TOUR_COMPLETED: 'tour_completed',
+  // Last timezone reported to the server. Kept so sync only sends a PATCH
+  // when the device actually moved zones, not on every single sync.
+  TIMEZONE: 'timezone',
 } as const;

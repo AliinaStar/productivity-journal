@@ -1,5 +1,5 @@
 import { Entry } from '@/db/types';
-import { apiFetch } from './client';
+import { ApiError, apiFetch } from './client';
 
 export interface RemoteEntry {
   id: number;
@@ -9,6 +9,12 @@ export interface RemoteEntry {
   productivity_score: number;
   // ISO datetime, or null for entries created before the column existed.
   created_at: string | null;
+  // ISO datetime of the last edit; null for rows never edited.
+  updated_at: string | null;
+  // Last day (YYYY-MM-DD) this entry can still be changed — the Sunday of its
+  // own week, resolved in the account's timezone. The server enforces the same
+  // boundary on PATCH and DELETE.
+  editable_until: string;
 }
 
 export async function listEntries(limit = 100, offset = 0): Promise<RemoteEntry[]> {
@@ -36,7 +42,7 @@ export async function createEntry(
     }),
   });
 
-  if (!res.ok) throw new Error(`Failed to create entry: ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, `Failed to create entry: ${res.status}`);
   return res.json();
 }
 
@@ -50,5 +56,14 @@ export async function updateEntry(
     body: JSON.stringify(data),
   });
 
-  if (!res.ok) throw new Error(`Failed to update entry: ${res.status}`);
+  // 403 means the entry's week closed before the edit reached the server.
+  if (!res.ok) throw new ApiError(res.status, `Failed to update entry: ${res.status}`);
+}
+
+export async function deleteEntry(remoteId: number): Promise<void> {
+  const res = await apiFetch(`/entries/${remoteId}`, { method: 'DELETE' });
+
+  // 404 means it is already gone — the outcome we wanted, so not an error.
+  if (res.status === 404) return;
+  if (!res.ok) throw new ApiError(res.status, `Failed to delete entry: ${res.status}`);
 }

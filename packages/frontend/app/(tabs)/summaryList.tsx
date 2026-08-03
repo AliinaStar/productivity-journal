@@ -8,6 +8,7 @@ import { useReports } from '@/db/reports';
 import { useSync } from '@/hooks/useSync';
 import { ReportCache, PeriodType } from '@/db/types';
 import { periodLabel } from '@/utils/period';
+import { Bounded } from '@/components/bounded';
 
 const TABS: PeriodType[] = ['week', 'month', 'year'];
 
@@ -43,6 +44,7 @@ export default function OverviewScreen() {
 
   return (
     <View style={s.container}>
+      <Bounded>
       <Text style={[s.title, { paddingTop: insets.top + 14 }]}>{t('overview.title')}</Text>
       <Text style={s.subtitle}>{t('overview.subtitle')}</Text>
 
@@ -89,6 +91,7 @@ export default function OverviewScreen() {
           ListEmptyComponent={!latest ? <Text style={s.empty}>{t('summary.noReports')}</Text> : null}
         />
       )}
+      </Bounded>
     </View>
   );
 }

@@ -54,6 +54,30 @@ def test_patch_me_rejects_under_13_age_group(client, make_user):
     assert res.status_code == 422
 
 
+def test_patch_me_sets_timezone(client, make_user):
+    user = make_user()
+    res = client.patch(
+        "/users/me", json={"timezone": "Europe/Kyiv"}, headers=user["headers"]
+    )
+    assert res.status_code == 200
+    assert res.json()["timezone"] == "Europe/Kyiv"
+
+
+def test_patch_me_rejects_unknown_timezone(client, make_user):
+    """Storing an unresolvable zone would look authoritative while silently
+    behaving as UTC — better to reject it and keep the column honestly NULL."""
+    user = make_user()
+    res = client.patch(
+        "/users/me", json={"timezone": "Mars/Olympus_Mons"}, headers=user["headers"]
+    )
+    assert res.status_code == 422
+
+
+def test_timezone_defaults_to_null_for_new_users(client, make_user):
+    user = make_user()
+    assert client.get("/users/me", headers=user["headers"]).json()["timezone"] is None
+
+
 def test_push_token_requires_auth(client):
     assert client.post("/users/me/push-token", json={"token": "x"}).status_code in (401, 403)
 

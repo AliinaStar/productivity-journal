@@ -15,6 +15,22 @@ export class AuthError extends Error {
   }
 }
 
+/**
+ * A request the server rejected, carrying the status code.
+ *
+ * Sync needs to tell "try again later" apart from "this will never work":
+ * a 403 on an entry whose week has closed can only be resolved by dropping
+ * the local change, whereas a 500 or a dropped connection should be retried.
+ * Without the status the caller sees an indistinguishable Error and would
+ * retry the hopeless case forever.
+ */
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 /** Revoke the refresh token server-side, then clear local tokens. Best-effort. */
 export async function logout(): Promise<void> {
   const refreshToken = await getRefreshToken();

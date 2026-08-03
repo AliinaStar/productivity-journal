@@ -1,25 +1,39 @@
 """APScheduler setup for automatic report generation.
 
-Schedules three cron jobs — week, month, year — each of which calls
-``generate_reports_for_period`` for all active users.
+Reports are generated per user, on that user's own calendar. A single job
+runs every hour and asks, for each user and each of week/month/year: has that
+period ended in *their* timezone, and is it past ``REPORT_LOCAL_HOUR`` there?
+Everyone therefore gets their report on the morning after their own period
+ends, whether they live in Kyiv or Vancouver.
+
+The job is level-triggered, not edge-triggered — it looks at the state of the
+world ("this period is over and has no report") rather than at a moment in
+time ("it is now Monday 00:01"). Three things fall out of that:
+
+  - it is its own catch-up. A server down for half a day generates everything
+    it missed on the next tick, so no separate startup backfill and no
+    misfire-grace juggling.
+  - it survives DST. In countries that shift the clock at midnight, local
+    00:00 does not exist on one day a year; a job keyed to that instant would
+    silently skip a week.
+  - it cannot race the entry edit window. Both read the same
+    ``src.core.periods`` helpers, so an entry stops being editable exactly
+    when its period closes, which is never later than the report.
 
 The scheduler is started / stopped via FastAPI lifespan in ``src/api/main.py``.
-
-Cron schedule (UTC):
-  - week:  Monday 00:01  — generates report for the just-finished week
-  - month: 1st of month 00:01 — generates report for the just-finished month
-  - year:  1 Jan 00:01  — generates report for the just-finished year
 """
 
 import asyncio
 import json
 import logging
-from datetime import date, datetime, timedelta, timezone
+from collections import defaultdict
+from datetime import date, datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import delete, or_
 
+from src.core.periods import due_report_period, resolve_tz
 from src.core.push import send_push
 from src.db.models import AuthCode, RefreshToken
 from src.db.session import get_async_sessionmaker
@@ -27,6 +41,10 @@ from src.rag import db
 from src.core.observability import get_langfuse_callbacks
 from src.rag.pipeline import app as pipeline
 from src.rag.state import DateDict
+
+# Ordered so a freshly generated sub-period can feed the summary above it:
+# this week's report is written before the month that contains it.
+PERIODS = ("week", "month", "year")
 
 logger = logging.getLogger(__name__)
 
@@ -69,16 +87,24 @@ async def _notify_report_ready(user_id: int, period: str) -> None:
     )
 
 
-async def _generate_one(user_id: int, period: str, date_dict: DateDict) -> None:
+async def _generate_one(
+    user_id: int,
+    period: str,
+    date_dict: DateDict,
+    period_start: date,
+    period_end: date,
+) -> None:
     """Generate and persist a single report, guarded by ``_semaphore``.
 
-    Idempotent: does nothing when the report already exists (so cron retries
-    and the startup catch-up can safely overlap) or when the user has no
-    entries in the period (no LLM call for inactive users).
+    Idempotent: does nothing when the report already exists (so overlapping
+    ticks are harmless) or when the user has no entries in the period (no LLM
+    call for inactive users). The ``report_exists`` check duplicates the batch
+    filter in :func:`generate_due_reports` on purpose — the batch snapshot is
+    taken before any generation starts, and a slow tick can still be running
+    when the next one begins.
     """
     async with _semaphore:
         try:
-            period_start, period_end = _period_dates(period, date_dict)
             if await db.report_exists(user_id, period, period_start):
                 return
 
@@ -130,50 +156,61 @@ async def _generate_one(user_id: int, period: str, date_dict: DateDict) -> None:
             logger.exception("Failed to generate report for user=%s period=%s", user_id, period)
 
 
-async def generate_reports_for_period(period: str, date_dict: DateDict) -> None:
-    """Generate and persist reports for *all* users for a given period.
+async def _generate_for_user(user_id: int, due: list[tuple]) -> None:
+    """Run one user's due periods in order, week → month → year.
 
-    Fetches every user from the DB, then fires one ``_generate_one`` task
-    per user. All tasks run concurrently but are throttled to 10 at a time
-    via ``_semaphore``.
+    Sequential per user so a week report written on this tick is already in
+    the DB when the month report that summarises it is generated. Different
+    users still run concurrently; ``_semaphore`` caps total LLM concurrency.
+    """
+    for period, date_dict, start, end in sorted(due, key=lambda job: PERIODS.index(job[0])):
+        await _generate_one(user_id, period, date_dict, start, end)
+
+
+async def generate_due_reports() -> None:
+    """Hourly job — write every report whose period has closed for its owner.
+
+    "Closed" is evaluated in each user's own timezone, so this fires for a
+    Kyiv user roughly nine hours before it fires for a Vancouver one, on the
+    same calendar boundary.
     """
     users = await db.get_all_users()
-    await asyncio.gather(*[_generate_one(u.id, period, date_dict) for u in users])
+    if not users:
+        return
 
+    due: list[tuple[int, str, DateDict, date, date]] = []
+    for user in users:
+        tz = resolve_tz(user.timezone)
+        for period in PERIODS:
+            found = due_report_period(period, tz)
+            if found is None:
+                continue  # still inside the period, or before REPORT_LOCAL_HOUR
+            date_dict, start, end = found
+            due.append((user.id, period, date_dict, start, end))
 
-def _period_dates(period: str, date_dict: DateDict) -> tuple[date, date]:
-    """Compute (period_start, period_end) from a DateDict."""
-    if period == "week":
-        start = datetime.fromisocalendar(date_dict["year"], date_dict["week"], 1).date()
-        return start, start + timedelta(days=6)
-    elif period == "month":
-        import calendar
-        start = date(date_dict["year"], date_dict["month"], 1)
-        last_day = calendar.monthrange(date_dict["year"], date_dict["month"])[1]
-        return start, date(date_dict["year"], date_dict["month"], last_day)
-    else:
-        return date(date_dict["year"], 1, 1), date(date_dict["year"], 12, 31)
+    if not due:
+        return
 
+    # A single query for "which of these already exist". Every user shares the
+    # same handful of (period, period_start) pairs, so this is one round trip
+    # per tick instead of three per user — the difference between ~70 queries
+    # an hour and ~70k at scale.
+    existing = await db.existing_report_keys({(period, start) for _, period, _, start, _ in due})
 
-async def _run_weekly() -> None:
-    """Cron callback — generate reports for the just-finished week."""
-    yesterday = date.today() - timedelta(days=1)
-    iso = yesterday.isocalendar()
-    await generate_reports_for_period("week", {"year": iso.year, "week": iso.week})
+    by_user: dict[int, list[tuple]] = defaultdict(list)
+    for user_id, period, date_dict, start, end in due:
+        if (user_id, period, start) in existing:
+            continue
+        by_user[user_id].append((period, date_dict, start, end))
 
+    if not by_user:
+        return
 
-async def _run_monthly() -> None:
-    """Cron callback — generate reports for the just-finished month."""
-    yesterday = date.today() - timedelta(days=1)
-    await generate_reports_for_period(
-        "month", {"year": yesterday.year, "month": yesterday.month}
+    logger.info(
+        "Report tick: %s period(s) due across %s user(s)",
+        sum(len(jobs) for jobs in by_user.values()), len(by_user),
     )
-
-
-async def _run_yearly() -> None:
-    """Cron callback — generate reports for the just-finished year."""
-    yesterday = date.today() - timedelta(days=1)
-    await generate_reports_for_period("year", {"year": yesterday.year})
+    await asyncio.gather(*[_generate_for_user(uid, jobs) for uid, jobs in by_user.items()])
 
 
 async def cleanup_auth_artifacts() -> None:
@@ -196,50 +233,24 @@ async def cleanup_auth_artifacts() -> None:
         await session.commit()
 
 
-async def catch_up_missed_reports() -> None:
-    """Backfill reports for the most recent completed week, month, and year.
-
-    Runs once on startup. If the server was down when a cron fired, that
-    period's reports would otherwise be lost forever. ``_generate_one`` skips
-    users whose report already exists or who had no entries, so on a normal
-    startup this costs one cheap query per user and generates nothing.
-
-    Ordered week → month → year so a freshly backfilled sub-period can feed
-    the higher-level summary.
-    """
-    today = date.today()
-
-    # Most recent completed ISO week = the week containing last Sunday.
-    last_sunday = today - timedelta(days=today.isoweekday())
-    iso = last_sunday.isocalendar()
-    await generate_reports_for_period("week", {"year": iso.year, "week": iso.week})
-
-    last_month_day = today.replace(day=1) - timedelta(days=1)
-    await generate_reports_for_period(
-        "month", {"year": last_month_day.year, "month": last_month_day.month}
-    )
-
-    await generate_reports_for_period("year", {"year": today.year - 1})
-
-
-# If the server is down when a cron fires, still run the job up to 12 hours
-# late instead of silently dropping it. Anything older is handled by the
-# startup catch-up job.
-_MISFIRE_GRACE = 12 * 3600
-
-
 def register_jobs() -> None:
-    """Register all cron jobs on the module-level ``scheduler`` instance.
+    """Register all jobs on the module-level ``scheduler`` instance.
 
     Call once during application startup (before ``scheduler.start()``).
     """
-    scheduler.add_job(_run_weekly,  CronTrigger(day_of_week="mon", hour=0, minute=1),
-                      misfire_grace_time=_MISFIRE_GRACE)
-    scheduler.add_job(_run_monthly, CronTrigger(day=1,              hour=0, minute=1),
-                      misfire_grace_time=_MISFIRE_GRACE)
-    scheduler.add_job(_run_yearly,  CronTrigger(month=1,  day=1,    hour=0, minute=1),
-                      misfire_grace_time=_MISFIRE_GRACE)
+    # Every hour at :05. No misfire grace and no separate catch-up job: the
+    # tick is idempotent and recomputes what is due from scratch, so a missed
+    # firing costs at most an hour's delay and the next one repairs it.
+    scheduler.add_job(
+        generate_due_reports,
+        CronTrigger(minute=5),
+        # A tick that overruns the hour must not have a second copy start
+        # alongside it — both would generate the same reports.
+        max_instances=1,
+        coalesce=True,
+    )
     scheduler.add_job(cleanup_auth_artifacts, CronTrigger(hour=3, minute=0),
                       misfire_grace_time=3600)
-    # One-off: backfill anything missed while the server was down.
-    scheduler.add_job(catch_up_missed_reports)
+    # Run once at startup too, so a deploy does not wait up to an hour to
+    # generate whatever came due while the server was down.
+    scheduler.add_job(generate_due_reports)

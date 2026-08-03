@@ -45,8 +45,16 @@ export function useSyncMeta() {
     return set(SYNC_KEYS.TOUR_COMPLETED, '1');
   }
 
+  async function getReportedTimezone(): Promise<string | null> {
+    return get(SYNC_KEYS.TIMEZONE);
+  }
+
+  async function setReportedTimezone(timezone: string): Promise<void> {
+    return set(SYNC_KEYS.TIMEZONE, timezone);
+  }
+
   return {
     get, set, getLastSyncAt, setLastSyncAt, getUserRemoteId, setUserRemoteId,
-    getTourCompleted, setTourCompleted,
+    getTourCompleted, setTourCompleted, getReportedTimezone, setReportedTimezone,
   };
 }

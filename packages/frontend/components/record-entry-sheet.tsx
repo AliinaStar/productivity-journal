@@ -2,18 +2,28 @@ import { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useEntries } from '@/db/entries';
-import { Goal } from '@/db/types';
+import { Entry, Goal } from '@/db/types';
+import { todayIso } from '@/utils/date';
 import { BottomSheet } from './bottom-sheet';
 
 const DEFAULT_SCORE = 3;
 
-/** Bottom sheet for recording a progress entry against a goal. */
+/**
+ * Bottom sheet for writing a progress entry against a goal.
+ *
+ * Doubles as the edit form: pass `entry` to load an existing note instead of
+ * starting a blank one. Editing reuses this sheet rather than a screen of its
+ * own so the two never drift apart in validation or layout — an edited entry
+ * has to obey exactly the rules a new one does.
+ */
 export function RecordEntrySheet({
   goal,
+  entry = null,
   onClose,
   onSaved,
 }: {
   goal: Goal | null;
+  entry?: Entry | null;
   onClose: () => void;
   onSaved: (goalId: string) => void;
 }) {
@@ -24,14 +34,15 @@ export function RecordEntrySheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset the form whenever the sheet is opened for a (new) goal.
+  // Reset the form whenever the sheet is opened — blank for a new entry,
+  // prefilled with the existing one when editing.
   useEffect(() => {
     if (goal) {
-      setNote('');
-      setScore(DEFAULT_SCORE);
+      setNote(entry?.note ?? '');
+      setScore(entry?.productivity_score ?? DEFAULT_SCORE);
       setError(null);
     }
-  }, [goal?.id]);
+  }, [goal?.id, entry?.id]);
 
   async function handleSave() {
     if (!goal) return;
@@ -39,12 +50,24 @@ export function RecordEntrySheet({
     setSaving(true);
     setError(null);
     try {
-      await entries.create({
-        goalId: goal.id,
-        dateNote: new Date().toISOString().split('T')[0],
-        note: note.trim(),
-        productivityScore: score,
-      });
+      if (entry) {
+        // date_note is left alone: moving an entry between weeks is what the
+        // edit window exists to prevent, and the server rejects it anyway.
+        await entries.update(entry.id, {
+          note: note.trim(),
+          productivity_score: score,
+        });
+      } else {
+        await entries.create({
+          goalId: goal.id,
+          // The device's own calendar day, not the UTC one: a note written at
+          // 01:00 in Kyiv belongs to that day, not to yesterday. This is also
+          // the week whose report will quote it and how long it stays editable.
+          dateNote: todayIso(),
+          note: note.trim(),
+          productivityScore: score,
+        });
+      }
       onSaved(goal.id);
     } catch {
       setError(t('entry.errorSave'));
@@ -57,7 +80,7 @@ export function RecordEntrySheet({
     <BottomSheet visible={!!goal} onClose={onClose}>
       {goal && (
         <View>
-          <Text style={s.title}>{t('entry.new')}</Text>
+          <Text style={s.title}>{entry ? t('entry.editTitle') : t('entry.new')}</Text>
           <Text style={s.subtitle}>{goal.title}</Text>
 
           <Text style={s.label}>{t('entry.noteLabel')}</Text>
