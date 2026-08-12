@@ -11,8 +11,9 @@ world ("this period is over and has no report") rather than at a moment in
 time ("it is now Monday 00:01"). Three things fall out of that:
 
   - it is its own catch-up. A server down for half a day generates everything
-    it missed on the next tick, so no separate startup backfill and no
-    misfire-grace juggling.
+    it missed on the next tick, so there is no backfill job to keep in sync
+    with it — and a tick that runs late is still a correct tick, which is why
+    both jobs below disable misfire handling outright.
   - it survives DST. In countries that shift the clock at midnight, local
     00:00 does not exist on one day a year; a job keyed to that instant would
     silently skip a week.
@@ -238,12 +239,15 @@ def register_jobs() -> None:
 
     Call once during application startup (before ``scheduler.start()``).
     """
-    # Every hour at :05. No misfire grace and no separate catch-up job: the
-    # tick is idempotent and recomputes what is due from scratch, so a missed
-    # firing costs at most an hour's delay and the next one repairs it.
+    # Every hour at :05, and no separate catch-up job: the tick is idempotent
+    # and recomputes what is due from scratch, so a late run is always still
+    # the right run.
     scheduler.add_job(
         generate_due_reports,
         CronTrigger(minute=5),
+        # None is what "run it however late it is" actually spells, and it is safe here
+        # precisely because the tick is level-triggered.
+        misfire_grace_time=None,
         # A tick that overruns the hour must not have a second copy start
         # alongside it — both would generate the same reports.
         max_instances=1,
@@ -252,5 +256,9 @@ def register_jobs() -> None:
     scheduler.add_job(cleanup_auth_artifacts, CronTrigger(hour=3, minute=0),
                       misfire_grace_time=3600)
     # Run once at startup too, so a deploy does not wait up to an hour to
-    # generate whatever came due while the server was down.
-    scheduler.add_job(generate_due_reports)
+    # generate whatever came due while the server was down. This one fires
+    # exactly once and is then dropped from the job store, so a misfire here
+    # is not repaired by a later tick the way the hourly job's is — it simply
+    # never happens. Hence the explicit grace: startup contends with the
+    # embedding model load, which is easily more than a second of GIL.
+    scheduler.add_job(generate_due_reports, misfire_grace_time=None)
