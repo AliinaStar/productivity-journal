@@ -33,12 +33,20 @@ UTC = ZoneInfo("UTC")
 # gate the report — and its "report is ready 📊" push — would land at 00:0x.
 REPORT_LOCAL_HOUR = 8
 
-# How long after a period ends the hourly job keeps offering to generate its
-# report. Bounds the retry window: without it, "last completed year" stays due
-# every hour for twelve months, so every user who wrote nothing last year gets
-# re-checked ~8700 times for a report that will never exist. A week of hourly
-# retries is far more downtime than the old weekly cron ever tolerated.
-REPORT_GRACE_DAYS = 7
+# How many finished periods back a tick will still look. This is the depth of
+# the catch-up: a gap older than the horizon is never repaired.
+#
+# It replaces a grace window measured in days, which could not do this job.
+# The window bounded how long *one* period stayed on offer, but the offer was
+# only ever the single most recently finished period — so once the next week
+# closed, the previous one became unreachable no matter how wide the window
+# was. Raising it from 7 days to ten years recovered exactly nothing.
+#
+# The cost the window was really guarding against — re-checking a period that
+# will never produce a report, every hour forever — is handled instead by
+# recording the outcome of every period we resolve (see ``ReportStatus``), so
+# a period is examined once and then never again.
+CATCH_UP_HORIZON = {"week": 8, "month": 3, "year": 1}
 
 # A DateDict (see ``src/rag/state.py``) identifies one period:
 #   week  → {"year": 2026, "week": 31}   (ISO year + ISO week)
@@ -138,26 +146,36 @@ def is_period_open(period: str, day: date, tz: ZoneInfo) -> bool:
     return today_in(tz) <= end
 
 
-def due_report_period(period: str, tz: ZoneInfo) -> tuple[dict, date, date] | None:
-    """The last completed period, while it is both safe and still worth
-    reporting on in *tz*.
+def closed_periods(period: str, tz: ZoneInfo) -> list[tuple[dict, date, date]]:
+    """Every period of this kind that has finished in *tz*, newest first.
 
-    Returns ``(date_dict, period_start, period_end)``, or ``None`` when it is
-    too early (before :data:`REPORT_LOCAL_HOUR` local time) or too late (more
-    than :data:`REPORT_GRACE_DAYS` past the period's end).
+    Returns up to :data:`CATCH_UP_HORIZON` entries of
+    ``(date_dict, period_start, period_end)`` — the most recently finished
+    period, then the one before it, and so on. Empty before
+    :data:`REPORT_LOCAL_HOUR` local time, which keeps the "report is ready 📊"
+    push out of the small hours; a catch-up waiting until morning is fine.
 
-    Within that window it is *level*-triggered, not edge-triggered: it keeps
-    returning the same period, and the caller skips periods whose report
-    already exists. That is what makes the hourly job self-healing (a server
-    down for six hours simply catches up on the next tick) and immune to the
-    DST transitions that delete local midnight in some countries — a job keyed
-    on "is it 00:00 there?" would silently skip a week once a year.
+    Returning the whole list rather than only the newest period is what makes
+    the job self-healing in fact and not only in intent. The caller skips
+    periods it has already resolved, so in the steady state exactly one entry
+    here is new; after an outage, every period inside the horizon is, and the
+    next tick repairs the lot.
+
+    It is *level*-triggered, not edge-triggered: it describes the state of the
+    calendar rather than a moment in it, so it is immune to the DST
+    transitions that delete local midnight in some countries — a job keyed on
+    "is it 00:00 there?" would silently skip a week once a year.
     """
     now = local_now(tz)
     if now.hour < REPORT_LOCAL_HOUR:
-        return None
+        return []
+
+    found: list[tuple[dict, date, date]] = []
     date_dict = last_completed(period, now.date())
-    start, end = bounds_of(period, date_dict)
-    if now.date() > end + timedelta(days=REPORT_GRACE_DAYS):
-        return None
-    return date_dict, start, end
+    for _ in range(CATCH_UP_HORIZON[period]):
+        start, end = bounds_of(period, date_dict)
+        found.append((date_dict, start, end))
+        # Step back one period: the day before this one began belongs to the
+        # previous one, whatever calendar oddity that lands on.
+        date_dict = last_completed(period, start)
+    return found

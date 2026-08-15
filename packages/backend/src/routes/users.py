@@ -143,8 +143,13 @@ async def export_data(
         .where(Goal.user_id == current_user.id)
     )).scalars().all()
 
+    # Only real reports: the table also holds the scheduler's bookkeeping rows
+    # for periods that were empty, failed or are still being worked, and those
+    # would read as blank reports in someone's data export.
     reports = (await session.execute(
-        select(Report).where(Report.user_id == current_user.id)
+        select(Report)
+        .where(Report.user_id == current_user.id)
+        .where(Report.status == "ready")
     )).scalars().all()
 
     return {

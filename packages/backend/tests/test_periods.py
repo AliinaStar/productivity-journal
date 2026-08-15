@@ -117,60 +117,66 @@ def test_edit_window_follows_the_users_own_clock(frozen, monkeypatch):
     assert periods.is_period_open("week", entry_day, VANCOUVER)
 
 
-# --- when a report becomes due ----------------------------------------------
+# --- which periods a tick considers -----------------------------------------
 
-def test_report_not_due_before_the_local_report_hour(frozen):
+def test_nothing_is_offered_before_the_local_report_hour(frozen):
     frozen(datetime(2026, 8, 10, periods.REPORT_LOCAL_HOUR - 1, 30))
-    assert periods.due_report_period("week", KYIV) is None
+    assert periods.closed_periods("week", KYIV) == []
 
 
-def test_report_due_after_the_local_report_hour(frozen):
+def test_newest_closed_period_comes_first(frozen):
     frozen(datetime(2026, 8, 10, periods.REPORT_LOCAL_HOUR, 5))
-    due = periods.due_report_period("week", KYIV)
-    assert due is not None
-    date_dict, start, end = due
+    date_dict, start, end = periods.closed_periods("week", KYIV)[0]
     assert date_dict == {"year": 2026, "week": 32}
     assert (start, end) == (date(2026, 8, 3), date(2026, 8, 9))
 
 
-def test_report_stays_due_all_day(frozen):
+def test_the_same_periods_are_offered_all_day(frozen):
     """Level-triggered, not edge-triggered: a tick at 08:05 and one at 21:05
-    must offer the same period, so a missed hour is never a missed report."""
+    must offer the same periods, so a missed hour is never a missed report."""
     frozen(datetime(2026, 8, 10, 8, 5))
-    morning = periods.due_report_period("week", KYIV)
+    morning = periods.closed_periods("week", KYIV)
     frozen(datetime(2026, 8, 10, 21, 5))
-    evening = periods.due_report_period("week", KYIV)
-    assert morning == evening
+    assert morning == periods.closed_periods("week", KYIV)
 
 
-def test_report_stops_being_due_after_the_grace_window(frozen):
-    """Bounds the retry window. Without it, "last completed year" stays due
-    every hour for twelve months for every user who wrote nothing in it."""
-    frozen(datetime(2026, 8, 10, 9, 0))  # day after week 32 ended
-    assert periods.due_report_period("week", KYIV) is not None
+def test_the_horizon_reaches_back_past_the_newest_period(frozen):
+    """The whole point of the horizon: a week that closed a month ago is still
+    offered, so an outage longer than one period repairs itself. Under the old
+    single-period rule this was unreachable at any grace setting."""
+    frozen(datetime(2026, 8, 10, 9, 0))
+    weeks = periods.closed_periods("week", KYIV)
 
-    frozen(datetime(2026, 8, 9 + periods.REPORT_GRACE_DAYS, 9, 0))  # last day in grace
-    assert periods.due_report_period("week", KYIV) is not None
-
-    frozen(datetime(2026, 8, 10 + periods.REPORT_GRACE_DAYS, 9, 0))  # one day past
-    due = periods.due_report_period("week", KYIV)
-    # Not None here — by now a *newer* week has closed. What matters is that
-    # the stale one is no longer being offered.
-    assert due is None or due[1] != date(2026, 8, 3)
-
-
-def test_stale_year_report_is_not_offered_forever(frozen):
-    frozen(datetime(2026, 6, 1, 9, 0))  # mid-year: 2025 ended long ago
-    assert periods.due_report_period("year", KYIV) is None
-
-    frozen(datetime(2026, 1, 2, 9, 0))  # early January: still worth generating
-    assert periods.due_report_period("year", KYIV) is not None
+    assert len(weeks) == periods.CATCH_UP_HORIZON["week"]
+    starts = [start for _, start, _ in weeks]
+    # Contiguous, newest first, no gaps and no repeats.
+    assert starts == sorted(starts, reverse=True)
+    assert all((a - b).days == 7 for a, b in zip(starts, starts[1:]))
+    # A week five weeks old is still on offer.
+    assert date(2026, 7, 6) in starts
 
 
-def test_report_due_with_a_fractional_utc_offset(frozen):
+def test_horizon_steps_back_across_month_and_year_boundaries(frozen):
+    frozen(datetime(2026, 1, 5, 9, 0))
+    starts = [start for _, start, _ in periods.closed_periods("week", KYIV)]
+    assert starts[0] == date(2025, 12, 29)  # ISO week 1 of 2026 began in December
+    assert all((a - b).days == 7 for a, b in zip(starts, starts[1:]))
+
+    frozen(datetime(2026, 2, 3, 9, 0))
+    months = [start for _, start, _ in periods.closed_periods("month", KYIV)]
+    assert months == [date(2026, 1, 1), date(2025, 12, 1), date(2025, 11, 1)]
+
+
+def test_year_horizon_offers_only_the_last_completed_year(frozen):
+    frozen(datetime(2026, 6, 1, 9, 0))
+    years = periods.closed_periods("year", KYIV)
+    assert [start for _, start, _ in years] == [date(2025, 1, 1)]
+
+
+def test_periods_offered_with_a_fractional_utc_offset(frozen):
     """Kathmandu is UTC+5:45 — the hour gate must still open there."""
     frozen(datetime(2026, 8, 10, 9, 46))
-    assert periods.due_report_period("week", KATHMANDU) is not None
+    assert periods.closed_periods("week", KATHMANDU)
 
 
 def test_edit_window_closes_before_the_report_is_due(frozen):
@@ -181,8 +187,9 @@ def test_edit_window_closes_before_the_report_is_due(frozen):
         for day in (9, 10):  # Sunday and Monday
             frozen(datetime(2026, 8, day, hour, 30))
             open_for_edit = periods.is_period_open("week", entry_day, KYIV)
-            due = periods.due_report_period("week", KYIV)
-            reportable = due is not None and due[1] == date(2026, 8, 3)
+            reportable = any(
+                start == date(2026, 8, 3) for _, start, _ in periods.closed_periods("week", KYIV)
+            )
             assert not (open_for_edit and reportable)
 
 

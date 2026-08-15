@@ -8,14 +8,27 @@ from datetime import date
 
 
 def _insert_report(db, user_id: int, period: str = "week",
-                   period_start: str = "2026-01-05", period_end: str = "2026-01-11"):
+                   period_start: str = "2026-01-05", period_end: str = "2026-01-11",
+                   status: str = "ready", final_report: str | None = '{"summary": "great week"}'):
     db.execute(
         """INSERT INTO report
            (user_id, period, period_start, period_end, avg_productivity,
-            active_days, created_at, final_report)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            active_days, created_at, final_report, status)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (user_id, period, period_start, period_end, 4.5, 3, date.today(),
-         '{"summary": "great week"}'),
+         final_report, status),
+    )
+
+
+def _insert_bookkeeping(db, user_id: int, status: str, period_start: str):
+    """A row the scheduler wrote to record what became of a period, with no
+    report attached — 'empty', 'failed', 'pending' or 'running'."""
+    _insert_report(
+        db, user_id,
+        period_start=period_start,
+        period_end=period_start,
+        status=status,
+        final_report=None,
     )
 
 
@@ -68,3 +81,48 @@ def test_reports_scoped_to_user(client, db, make_user):
     _insert_report(db, alice["user_id"])
 
     assert client.get("/reports/list?period=week", headers=bob["headers"]).json() == []
+
+
+def test_bookkeeping_rows_are_not_reports(client, db, make_user):
+    """Every period the scheduler resolves leaves a row, report or not. Those
+    rows are not shown: an empty week is not a blank report card, and a failed
+    one is not a report at all."""
+    user = make_user()
+    for status, start in (
+        ("empty", "2026-01-12"),
+        ("failed", "2026-01-19"),
+        ("pending", "2026-01-26"),
+        ("running", "2026-02-02"),
+    ):
+        _insert_bookkeeping(db, user["user_id"], status, start)
+
+    assert client.get("/reports/list?period=week", headers=user["headers"]).json() == []
+
+    single = client.get(
+        "/reports?period=week&period_start=2026-01-12", headers=user["headers"]
+    )
+    assert single.status_code == 200
+    assert single.json() is None
+
+
+def test_bookkeeping_rows_do_not_crowd_out_real_ones(client, db, make_user):
+    """The list is paginated. Unfiltered, the four bookkeeping rows below sort
+    ahead of the real report and would push it off the first page."""
+    user = make_user()
+    _insert_report(db, user["user_id"], period_start="2026-01-05", period_end="2026-01-11")
+    for start in ("2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02"):
+        _insert_bookkeeping(db, user["user_id"], "empty", start)
+
+    listed = client.get(
+        "/reports/list?period=week&limit=3", headers=user["headers"]
+    ).json()
+    assert [r["period_start"] for r in listed] == ["2026-01-05"]
+
+
+def test_data_export_excludes_bookkeeping_rows(client, db, make_user):
+    user = make_user()
+    _insert_report(db, user["user_id"])
+    _insert_bookkeeping(db, user["user_id"], "empty", "2026-01-12")
+
+    export = client.get("/users/me/export", headers=user["headers"]).json()
+    assert [r["period_start"] for r in export["reports"]] == ["2026-01-05"]

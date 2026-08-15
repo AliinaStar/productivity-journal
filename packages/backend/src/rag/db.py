@@ -5,10 +5,11 @@ No business logic lives here — only data access.
 """
 
 from collections import defaultdict
-from datetime import date as date_type, date
+from datetime import date as date_type, date, datetime, timezone
 
 import numpy as np
-from sqlalchemy import extract, func, select, tuple_
+from sqlalchemy import and_, extract, func, or_, select, tuple_, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import contains_eager
 
 from src.db.models import Entry, Goal, Report, User
@@ -61,45 +62,127 @@ def build_where_clause(period: str, date: DateDict, user_id: int):
         )
 
 
-async def report_exists(user_id: int, period: str, period_start: date_type) -> bool:
-    """True if a report already exists for (user, period, period_start).
-
-    Lets the scheduler skip regeneration: cron retries and the startup
-    catch-up job are idempotent thanks to this check (plus the DB-level
-    unique constraint as a safety net).
-    """
-    session_factory = get_async_sessionmaker()
-    async with session_factory() as session:
-        result = await session.execute(
-            select(Report.id)
-            .where(Report.user_id == user_id)
-            .where(Report.period == period)
-            .where(Report.period_start == period_start)
-            .limit(1)
-        )
-        return result.first() is not None
-
-
-async def existing_report_keys(
+async def report_states(
     periods: set[tuple[str, date_type]],
-) -> set[tuple[int, str, date_type]]:
-    """Which ``(user_id, period, period_start)`` reports already exist.
+) -> dict[tuple[int, str, date_type], tuple[str, int, datetime | None]]:
+    """Current ``(status, attempts, started_at)`` of every row in *periods*.
 
-    The batched form of :func:`report_exists`. The hourly scheduler asks this
-    once per tick instead of once per user per period — with the periods being
-    the same handful of ``(period, period_start)`` pairs for everybody, that is
-    one query rather than three per user every hour.
+    The scheduler's whole view of what it has already done, asked once per
+    tick rather than once per user per period: everybody shares the same
+    handful of ``(period, period_start)`` pairs, so this is one round trip
+    instead of three per user every hour.
+
+    A key that is absent has never been looked at. That distinction is the
+    point of the status column — absence used to also mean "nothing to report"
+    and "generation failed".
     """
     if not periods:
-        return set()
+        return {}
     session_factory = get_async_sessionmaker()
     async with session_factory() as session:
         result = await session.execute(
-            select(Report.user_id, Report.period, Report.period_start).where(
-                tuple_(Report.period, Report.period_start).in_(list(periods))
-            )
+            select(
+                Report.user_id,
+                Report.period,
+                Report.period_start,
+                Report.status,
+                Report.attempts,
+                Report.started_at,
+            ).where(tuple_(Report.period, Report.period_start).in_(list(periods)))
         )
-        return {(row.user_id, row.period, row.period_start) for row in result}
+        return {
+            (row.user_id, row.period, row.period_start): (
+                row.status,
+                row.attempts,
+                row.started_at,
+            )
+            for row in result
+        }
+
+
+async def claim_report(
+    user_id: int,
+    period: str,
+    period_start: date_type,
+    period_end: date_type,
+    stale_before: datetime,
+    max_attempts: int,
+) -> bool:
+    """Take ownership of one period's generation. True if this caller got it.
+
+    Inserts the bookkeeping row if the period has never been seen, then moves
+    it to 'running' and bumps ``attempts`` — but only from a state that may be
+    worked: 'pending', 'failed' below *max_attempts*, or a 'running' claim
+    older than *stale_before*, which belongs to a process that died holding it.
+
+    The claim is a single conditional UPDATE, so two overlapping ticks cannot
+    both win it: the loser's UPDATE matches no row and it returns False. That
+    matters more than it used to, because a tick now works several periods and
+    can overrun the hour.
+    """
+    session_factory = get_async_sessionmaker()
+    now = datetime.now(timezone.utc)
+    async with session_factory() as session:
+        # ON CONFLICT DO NOTHING: the row may already exist, and racing ticks
+        # may both try to create it. The unique constraint decides.
+        await session.execute(
+            pg_insert(Report)
+            .values(
+                user_id=user_id,
+                period=period,
+                period_start=period_start,
+                period_end=period_end,
+                status="pending",
+                attempts=0,
+                active_days=0,
+                created_at=date.today(),
+            )
+            .on_conflict_do_nothing(constraint="uq_report_user_period_start")
+        )
+
+        claimable = or_(
+            Report.status == "pending",
+            and_(Report.status == "failed", Report.attempts < max_attempts),
+            and_(Report.status == "running", Report.started_at < stale_before),
+        )
+        result = await session.execute(
+            update(Report)
+            .where(
+                Report.user_id == user_id,
+                Report.period == period,
+                Report.period_start == period_start,
+                claimable,
+            )
+            .values(status="running", started_at=now, attempts=Report.attempts + 1)
+        )
+        await session.commit()
+        return result.rowcount > 0
+
+
+async def finish_report(
+    user_id: int,
+    period: str,
+    period_start: date_type,
+    status: str,
+    last_error: str | None = None,
+) -> None:
+    """Close out a claimed period as 'empty' or 'failed'.
+
+    The 'ready' case goes through :func:`save_report`, which has a report to
+    store alongside the status.
+    """
+    session_factory = get_async_sessionmaker()
+    async with session_factory() as session:
+        await session.execute(
+            update(Report)
+            .where(
+                Report.user_id == user_id,
+                Report.period == period,
+                Report.period_start == period_start,
+            )
+            .values(status=status, started_at=None, last_error=last_error)
+        )
+        await session.commit()
 
 
 async def count_entries(period: str, date: DateDict, user_id: int) -> int:
@@ -207,6 +290,10 @@ async def query_sub_period_reports(
             select(Report)
             .where(Report.user_id == user_id)
             .where(Report.period == sub_period)
+            # Bookkeeping rows carry no report to summarise. The summarizer
+            # skips them anyway; not loading them keeps the decision in one
+            # place and off the wire.
+            .where(Report.status == "ready")
         )
         if period == "month":
             stmt = stmt.where(
@@ -301,7 +388,14 @@ async def save_report(
     tokens_used: int | None = None,
     generation_time: float | None = None,
 ) -> Report:
-    """Persist a generated report to the ``report`` table and return the new row.
+    """Store a finished report and mark its period 'ready'.
+
+    An upsert, not an insert: the scheduler claims a period before generating
+    it, so by the time there is a report to store the row already exists in
+    'running'. Writing a second one would trip ``uq_report_user_period_start``
+    and lose the report that was just paid for. The insert branch is kept for
+    callers that write a report without claiming first — notebooks, backfills
+    and the evaluation harness.
 
     Args:
         user_id:          Owner of the report.
@@ -318,23 +412,41 @@ async def save_report(
         generation_time:  Wall-clock seconds spent in the final LLM call.
 
     Returns:
-        The newly created ``Report`` ORM object with its ``id`` populated.
+        The stored ``Report`` ORM object.
     """
+    values = dict(
+        user_id=user_id,
+        period=period,
+        period_start=period_start,
+        period_end=period_end,
+        avg_productivity=avg_productivity,
+        active_days=active_days,
+        created_at=date.today(),
+        final_report=final_report,
+        tokens_used=tokens_used,
+        generation_time=generation_time,
+        status="ready",
+        started_at=None,
+        last_error=None,
+    )
     session_factory = get_async_sessionmaker()
     async with session_factory() as session:
-        row = Report(
-            user_id=user_id,
-            period=period,
-            period_start=period_start,
-            period_end=period_end,
-            avg_productivity=avg_productivity,
-            active_days=active_days,
-            created_at=date.today(),
-            final_report=final_report,
-            tokens_used=tokens_used,
-            generation_time=generation_time,
+        stmt = (
+            pg_insert(Report)
+            .values(**values)
+            .on_conflict_do_update(
+                constraint="uq_report_user_period_start",
+                # Everything except the identity of the period itself, so a
+                # regenerated report replaces the previous attempt's leftovers
+                # rather than half-overwriting them.
+                set_={
+                    k: v
+                    for k, v in values.items()
+                    if k not in ("user_id", "period", "period_start")
+                },
+            )
+            .returning(Report.id)
         )
-        session.add(row)
+        report_id = (await session.execute(stmt)).scalar_one()
         await session.commit()
-        await session.refresh(row)
-        return row
+        return await session.get(Report, report_id)

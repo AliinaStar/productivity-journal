@@ -60,6 +60,12 @@ async def list_reports(
         select(Report)
         .where(Report.user_id == current_user.id)
         .where(Report.period == period)
+        # 'ready' only. The table also carries a bookkeeping row for every
+        # period the scheduler has resolved without writing a report — empty
+        # ones, failed ones, ones in flight. Unfiltered they would not just
+        # show as blank cards, they would take up slots in this page and push
+        # real reports off it.
+        .where(Report.status == "ready")
         .order_by(Report.period_start.desc())
         .limit(page.limit)
         .offset(page.offset)
@@ -91,6 +97,9 @@ async def get_report(
         .where(Report.user_id == current_user.id)
         .where(Report.period == period)
         .where(Report.period_start == start)
+        # A bookkeeping row is not a report; "not generated" and "generated but
+        # empty" are both null to the client, as before this table tracked why.
+        .where(Report.status == "ready")
     )
     report = result.scalars().first()
 

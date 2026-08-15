@@ -87,6 +87,9 @@ class Report(Base):
             "user_id", "period", "period_start",
             name="uq_report_user_period_start",
         ),
+        # The scheduler's hot query: "which of these periods are unresolved",
+        # which reads status alongside the uniqueness key.
+        Index("ix_report_status_lookup", "status", "period", "period_start"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -94,8 +97,36 @@ class Report(Base):
     period: Mapped[str] = mapped_column(Enum("week", "month", "year", name="period_time"))
     period_start: Mapped[date] = mapped_column(Date)
     period_end: Mapped[date] = mapped_column(Date)
+    # What became of this period. The row exists for every closed period the
+    # scheduler has looked at, so its absence means "not looked at yet" and
+    # nothing else — before this column, absence also had to stand for "no
+    # entries to report on" and "generation failed", and those three were
+    # indistinguishable, which is how weeks went missing in silence.
+    #
+    #   pending  – period is closed, no attempt made yet
+    #   running  – an attempt is in flight (see ``started_at``)
+    #   ready    – ``final_report`` holds a report
+    #   empty    – nothing was written in this period; there is nothing to say
+    #   failed   – ``MAX_REPORT_ATTEMPTS`` attempts all raised; see ``last_error``
+    #
+    # Only 'ready' rows are shown to the user; the rest are bookkeeping.
+    status: Mapped[str] = mapped_column(
+        Enum("pending", "running", "ready", "empty", "failed", name="report_status"),
+        server_default="pending",
+        nullable=False,
+    )
+    # Attempts that reached the pipeline. Bounds retries so one poisoned period
+    # cannot be retried every hour until it falls out of the catch-up horizon.
+    attempts: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    # When the in-flight attempt was claimed. A process killed mid-generation
+    # leaves 'running' behind with nothing to clear it, so a claim older than
+    # ``RUNNING_STALE_AFTER`` is treated as abandoned and may be retaken.
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Last exception, truncated. Kept so a 'failed' row can be diagnosed after
+    # the logs it came from have rotated away.
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
     avg_productivity: Mapped[float | None] = mapped_column(Float, nullable=True)
-    active_days: Mapped[int] = mapped_column(Integer)
+    active_days: Mapped[int] = mapped_column(Integer, server_default="0")
     created_at: Mapped[date] = mapped_column(Date)
     final_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # Cost and latency of the LLM run that produced this report. Both are
