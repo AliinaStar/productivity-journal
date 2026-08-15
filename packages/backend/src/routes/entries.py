@@ -9,6 +9,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.dependencies import Pagination, get_current_user, get_db, get_pagination
@@ -71,6 +72,10 @@ class CreateEntryRequest(BaseModel):
     productivity_score: int = Field(ge=1, le=5)
     # The client's local time when the note was written. ISO 8601 datetime.
     created_at: str | None = None
+    # The row's id in the device's own database, which makes this POST safe to
+    # repeat. Optional: clients older than this field still work, they just get
+    # the previous at-least-once behaviour.
+    client_id: str | None = Field(default=None, max_length=64)
 
     _check_date = field_validator("date_note")(_validate_iso_date)
 
@@ -99,6 +104,18 @@ def _to_response(entry: Entry) -> EntryResponse:
 
 async def _embed(text: str) -> list[float]:
     return await embed_text(text)
+
+
+async def _find_by_client_id(
+    goal_id: int, client_id: str | None, session: AsyncSession
+) -> Entry | None:
+    """The entry this device already created for *client_id*, if any."""
+    if client_id is None:
+        return None
+    result = await session.execute(
+        select(Entry).where(Entry.goal_id == goal_id, Entry.client_id == client_id)
+    )
+    return result.scalars().first()
 
 
 async def _get_owned_entry(entry_id: int, user: User, session: AsyncSession) -> Entry:
@@ -164,6 +181,13 @@ async def create_entry(
 ) -> EntryResponse:
     """Create a new entry and generate its embedding asynchronously.
 
+    Idempotent when the client sends ``client_id``: the same note posted twice
+    yields one row and two identical responses. Without that the endpoint is
+    at-least-once, and a sync that races another or retries after a lost
+    response silently doubles the entry — which then reaches the report
+    prompts, where the model reads one note written twice as the user
+    deliberately repeating themselves.
+
     Raises:
         404: Goal not found or does not belong to the current user.
         422: productivity_score out of 1–5 range.
@@ -174,6 +198,11 @@ async def create_entry(
     if goal_result.scalars().first() is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found.")
 
+    if body.client_id is not None:
+        existing = await _find_by_client_id(body.goal_id, body.client_id, session)
+        if existing is not None:
+            return _to_response(existing)
+
     embedding = await _embed(body.note)
     client_created_at = _parse_client_created_at(body.created_at)
     entry = Entry(
@@ -182,6 +211,7 @@ async def create_entry(
         note=body.note,
         productivity_score=body.productivity_score,
         embedding=embedding,
+        client_id=body.client_id,
         # Only set when the client sent a usable value; leaving it unset lets
         # the column's server_default (now()) apply as before. updated_at is
         # pinned to the same instant so "created_at != updated_at" means
@@ -194,7 +224,21 @@ async def create_entry(
         ),
     )
     session.add(entry)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Two requests carrying the same client_id got past the lookup above
+        # together. The constraint let exactly one through; this is the other,
+        # and the row it wanted now exists, so return that instead of failing.
+        # Without this the check above is only a narrow-window optimisation —
+        # the race it exists to prevent is precisely the one that fires when
+        # two syncs start at the same moment.
+        await session.rollback()
+        existing = await _find_by_client_id(body.goal_id, body.client_id, session)
+        if existing is None:
+            raise
+        return _to_response(existing)
+
     await session.refresh(entry)
     return _to_response(entry)
 

@@ -258,3 +258,83 @@ def test_cannot_update_another_users_entry(client, make_user):
 
     res = client.patch(f"/entries/{entry_id}", json={"note": "hijacked"}, headers=bob["headers"])
     assert res.status_code == 404
+
+
+# --- idempotent creates -----------------------------------------------------
+#
+# POST /entries used to be at-least-once. Two syncs running at the same moment,
+# or one retried after its response was lost, each made a row. The duplicates
+# reached the report prompts, where the model read one note written twice as
+# the user deliberately emphasising it.
+
+
+def test_repeating_a_create_returns_the_same_entry(client, make_user):
+    user = make_user()
+    goal_id = _make_goal(client, user["headers"])
+    body = _entry_body(goal_id) | {"client_id": "device-uuid-1"}
+
+    first = client.post("/entries", json=body, headers=user["headers"])
+    second = client.post("/entries", json=body, headers=user["headers"])
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["id"] == second.json()["id"]
+    assert len(client.get("/entries", headers=user["headers"]).json()) == 1
+
+
+def test_a_repeat_does_not_overwrite_the_stored_note(client, make_user):
+    """The retry is the same request, so the first write stands. Whichever of
+    the two racing requests lost is not entitled to rewrite the winner."""
+    user = make_user()
+    goal_id = _make_goal(client, user["headers"])
+    body = _entry_body(goal_id) | {"client_id": "device-uuid-2"}
+
+    client.post("/entries", json=body, headers=user["headers"])
+    second = client.post(
+        "/entries", json=body | {"note": "different text"}, headers=user["headers"]
+    )
+
+    assert second.json()["note"] == "read 20 pages"
+
+
+def test_different_client_ids_are_different_entries(client, make_user):
+    user = make_user()
+    goal_id = _make_goal(client, user["headers"])
+
+    client.post("/entries", json=_entry_body(goal_id) | {"client_id": "a"}, headers=user["headers"])
+    client.post("/entries", json=_entry_body(goal_id) | {"client_id": "b"}, headers=user["headers"])
+
+    assert len(client.get("/entries", headers=user["headers"]).json()) == 2
+
+
+def test_creates_without_a_client_id_still_work(client, make_user):
+    """Clients older than the field keep working — they just keep the previous
+    at-least-once behaviour rather than being rejected."""
+    user = make_user()
+    goal_id = _make_goal(client, user["headers"])
+
+    client.post("/entries", json=_entry_body(goal_id), headers=user["headers"])
+    client.post("/entries", json=_entry_body(goal_id), headers=user["headers"])
+
+    # Two rows, and crucially no unique-constraint error: NULL client_ids must
+    # not collide with each other.
+    assert len(client.get("/entries", headers=user["headers"]).json()) == 2
+
+
+def test_client_ids_are_scoped_per_goal(client, make_user):
+    """Two devices could mint the same id; the constraint is per goal, and a
+    collision across users must never merge their entries."""
+    alice = make_user("alice@example.com")
+    bob = make_user("bob@example.com")
+    alice_goal = _make_goal(client, alice["headers"])
+    bob_goal = _make_goal(client, bob["headers"])
+
+    a = client.post(
+        "/entries", json=_entry_body(alice_goal) | {"client_id": "same"}, headers=alice["headers"]
+    )
+    b = client.post(
+        "/entries", json=_entry_body(bob_goal) | {"client_id": "same"}, headers=bob["headers"]
+    )
+
+    assert a.json()["id"] != b.json()["id"]
+    assert len(client.get("/entries", headers=bob["headers"]).json()) == 1

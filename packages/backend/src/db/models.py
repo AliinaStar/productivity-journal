@@ -30,10 +30,21 @@ class Entry(Base):
             postgresql_with={"m": 16, "ef_construction": 64},
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
+        # What makes POST /entries idempotent. Two syncs racing each other, or
+        # one retried after its response was lost, both carry the same
+        # client_id and the second is turned into a read of the first.
+        # NULLs never collide in Postgres, so entries from clients that do not
+        # send one are unaffected.
+        UniqueConstraint("goal_id", "client_id", name="uq_entry_goal_client_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     goal_id: Mapped[int] = mapped_column(ForeignKey("goal.id"))
+    # The id this row has in the device's own database — a UUID minted when the
+    # note was written, stable across retries. NULL for entries created before
+    # the column existed, and for any client too old to send it; those keep the
+    # previous at-least-once behaviour rather than being rejected.
+    client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     date_note: Mapped[date] = mapped_column(Date)
     note: Mapped[str] = mapped_column(Text)
     productivity_score: Mapped[int] = mapped_column(

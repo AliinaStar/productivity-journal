@@ -24,7 +24,7 @@ export async function listEntries(limit = 100, offset = 0): Promise<RemoteEntry[
 }
 
 export async function createEntry(
-  entry: Omit<Entry, 'id' | 'remote_id' | 'synced' | 'goal_id'>,
+  entry: Omit<Entry, 'remote_id' | 'synced' | 'goal_id'>,
   remoteGoalId: number,
 ): Promise<RemoteEntry> {
   const res = await apiFetch('/entries', {
@@ -39,6 +39,10 @@ export async function createEntry(
       // the only honest record of when the note was written — the server
       // otherwise stamps its own sync-time clock.
       created_at:         entry.created_at,
+      // The local row id, which makes this POST safe to repeat. Without it a
+      // create that succeeded but whose response never arrived is sent again
+      // on the next sync and becomes a second entry.
+      client_id:          entry.id,
     }),
   });
 

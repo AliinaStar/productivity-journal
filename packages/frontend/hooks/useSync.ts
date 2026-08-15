@@ -11,9 +11,20 @@ import * as UsersApi from '@/api-client/users';
 import { ApiError } from '@/api-client/client';
 import { Entry, PeriodType } from '@/db/types';
 import { toPeriodKey } from '@/utils/period';
+import { createSerialiser } from '@/utils/serialise';
 
 // Matches the backend's max page limit so offline sync stays complete.
 const PAGE_SIZE = 100;
+
+/**
+ * Serialises every push, across all callers — see `createSerialiser`.
+ *
+ * Module scope on purpose: one queue shared by every `useSync()` instance in
+ * the app. The server also rejects duplicates on its own now, via client_id;
+ * this stops the second request being made at all, and keeps `markSynced`
+ * from racing another push that has already read the same rows.
+ */
+const serialised = createSerialiser();
 
 /** Fetch every page from a paginated endpoint until a short page is returned. */
 async function fetchAllPages<T>(fetchPage: (offset: number) => Promise<T[]>): Promise<T[]> {
@@ -126,29 +137,34 @@ export function useSync() {
 
   // Push local unsynced data → backend
   // Goals must go before entries (entries reference goal remote_id)
-  async function pushChanges(): Promise<void> {
-    await requireUserId();
-    await pushTimezone();
+  //
+  // Serialised: see `serialised` above. Two overlapping pushes would each read
+  // the same unsynced rows and send them.
+  function pushChanges(): Promise<void> {
+    return serialised(async () => {
+      await requireUserId();
+      await pushTimezone();
 
-    // 1. Sync unsynced goals
-    const unsyncedGoals = await goals.getUnsynced();
+      // 1. Sync unsynced goals
+      const unsyncedGoals = await goals.getUnsynced();
 
-    for (const goal of unsyncedGoals) {
-      if (goal.remote_id) {
-        await GoalsApi.updateGoal(goal.remote_id, { title: goal.title, description: goal.description, deadline: goal.deadline, status: goal.status });
-        await goals.markSynced(goal.id, goal.remote_id);
-      } else {
-        const remote = await GoalsApi.createGoal(goal);
-        await goals.markSynced(goal.id, remote.id);
+      for (const goal of unsyncedGoals) {
+        if (goal.remote_id) {
+          await GoalsApi.updateGoal(goal.remote_id, { title: goal.title, description: goal.description, deadline: goal.deadline, status: goal.status });
+          await goals.markSynced(goal.id, goal.remote_id);
+        } else {
+          const remote = await GoalsApi.createGoal(goal);
+          await goals.markSynced(goal.id, remote.id);
+        }
       }
-    }
 
-    // 2. Sync unsynced entries — creates, edits and deletes
-    const unsyncedEntries = await entries.getUnsynced();
+      // 2. Sync unsynced entries — creates, edits and deletes
+      const unsyncedEntries = await entries.getUnsynced();
 
-    for (const entry of unsyncedEntries) {
-      await pushEntry(entry);
-    }
+      for (const entry of unsyncedEntries) {
+        await pushEntry(entry);
+      }
+    });
   }
 
   // Pull a specific report from backend and cache it locally
