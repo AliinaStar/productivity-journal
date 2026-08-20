@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useSync } from '@/hooks/useSync';
 import { apiFetch } from '@/api-client/client';
@@ -13,6 +14,7 @@ const AGE_GROUPS = ['13-17', '18-24', '25-34', '35-44', '45-54', '55+'] as const
 
 export default function OnboardingScreen() {
   const { t, i18n } = useTranslation();
+  const insets = useSafeAreaInsets();
   const { pullGoals, pullEntries } = useSync();
   const [name, setName] = useState('');
   const [language, setLanguage] = useState('Ukrainian');
@@ -46,7 +48,14 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <ScrollView style={s.scroll} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={s.scroll}
+      // Edge-to-edge is always on, so the scroll view runs the full height of the
+      // window: without the insets the title sits under the status bar and the
+      // continue button ends up behind the navigation bar.
+      contentContainerStyle={[s.content, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 28 }]}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={s.title}>{t('onboarding.title')}</Text>
       <Text style={s.sub}>{t('onboarding.sub')}</Text>
 
@@ -112,7 +121,7 @@ export default function OnboardingScreen() {
 
 const s = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: '#F5F4F0' },
-  content: { padding: 28, paddingTop: 64 },
+  content: { paddingHorizontal: 28 },
   title: { fontSize: 26, fontWeight: '700', color: '#26215C', marginBottom: 6 },
   sub: { fontSize: 14, color: '#888780', marginBottom: 36 },
   label: { fontSize: 13, fontWeight: '600', color: '#888780', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
